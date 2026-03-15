@@ -1,0 +1,70 @@
+# 🎯 HAR Variable Correlator
+
+**Instant Correlation Engine for Automatic detection of tokens, sessions, CSRF, UUIDs & more
+**
+
+*JMeter & Gatling Load Testing Made Easier*
+
+---
+
+## 📖 What is this project?
+
+This **Spring Boot** web application takes **HAR files** (HTTP Archive) recorded while navigating scenarios in **Mozilla Firefox** and does the heavy lifting:
+
+- Parses every request & response
+- Automatically detects **dynamic variables** (session IDs, tokens, CSRF values, timestamps, UUIDs, query parameters, headers, JSON bodies, etc.)
+- Creates **ready-to-use correlation rules**
+- Displays every variable and its value in a colored pattern
+
+Perfect for anyone who scripts load tests with **JMeter**, **Gatling**, **k6** or any other tool where manual correlation is necessary to replay the recorded scenario
+
+---
+
+## ✨ Key Features
+
+- ✅ **Drag & drop HAR upload**
+- ✅ **Smart correlation engine** (regex + JSONPath + header/body extraction)
+- ✅ **Visual correlation table** – see exactly where each variable is extracted and reused
+- ✅ **One-click export** of correlation rules (JSON / JMeter .jmx snippet / Gatling Scala)
+- ✅ **Side-by-side request viewer** – click any variable to highlight it in the original traffic
+- ✅ **Filtering & search** by variable name, domain, or request type
+- ✅ **Export final dynamic HAR file with dynamic variablss**
+
+---
+
+## 🚀 How to use it (in 30 seconds)
+
+1. Record your scenario in Firefox
+   → Open DevTools → Network tab → “Export HAR” (or use the **HAR Export Trigger** extension)
+
+2. Run the Spring Boot app (`mvn spring-boot:run`)
+
+3. Open `http://localhost:8080`
+
+4. Drop your `.har` file → get instant correlations!
+
+5. Copy the rules or export directly into your test script.
+
+---
+
+## 📸 Screenshots
+
+.Variable highlighting – Detected variables & reuse locations
+image:https://i.postimg.cc/76xtJRXM/1.png[]
+
+.Correlation Rules Export
+image:https://i.postimg.cc/jqpBqMPw/2.png[]
+
+.Final Correlated HAR Export
+image:https://i.postimg.cc/k5Yh0s7B/3.png[]
+
+---
+
+## 📦 Quick Start
+
+```bash
+git clone https://github.com/bpabdelkader/har-correlation-generator.git
+cd har-variable-correlator
+mvn clean spring-boot:run
+
+Then open your browser at http://localhost:8080
