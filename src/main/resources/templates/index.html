@@ -6,73 +6,247 @@
     <title>HAR Correlation Generator</title>
     <style>
         :root {
-            --bg: #f4f4ee;
-            --panel: #ffffff;
-            --text: #1f2a2e;
-            --accent: #1b6b7d;
-            --danger: #a31232;
-            --border: #d5ddd8;
+            --bg: #1f2023;
+            --panel: #34373c;
+            --panel-soft: #32353a;
+            --panel-alt: #232528;
+            --text: #dfe1e5;
+            --text-dim: #9da1a8;
+            --accent: rgb(86, 136, 182);
+            --accent-soft: rgb(58, 92, 123);
+            --danger: #c75450;
+            --border: #3f4349;
+            --border-soft: #4c5057;
+            --radius-sm: 6px;
+            --radius-md: 8px;
         }
         * { box-sizing: border-box; }
         body {
             margin: 0;
+            min-height: 100vh;
             padding: 24px;
             font-family: "Segoe UI", Tahoma, sans-serif;
-            background: radial-gradient(circle at top right, #d6e9ee, var(--bg) 55%);
+            background: linear-gradient(180deg, #1e1f22 0%, #232529 100%);
             color: var(--text);
         }
         .container {
-            max-width: 760px;
+            max-width: 1180px;
             margin: 0 auto;
             background: var(--panel);
             border: 1px solid var(--border);
-            border-radius: 14px;
+            border-radius: 10px;
+            padding: 18px;
+            box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
+        }
+        .hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+            gap: 18px;
+            align-items: stretch;
+        }
+        .hero-panel,
+        .upload-panel {
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            background: var(--panel-soft);
             padding: 22px;
         }
+        .hero-panel {
+            background:
+                radial-gradient(circle at top right, rgba(86, 136, 182, 0.18), transparent 34%),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 45%),
+                var(--panel-soft);
+        }
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            border: 1px solid var(--border-soft);
+            border-radius: 999px;
+            padding: 4px 10px;
+            background: rgba(76, 137, 199, 0.12);
+            color: rgb(182, 173, 86);
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
         h1 {
-            margin-top: 0;
-            margin-bottom: 14px;
-            font-size: 1.8rem;
+            margin: 14px 0 12px;
+            font-size: clamp(2rem, 4vw, 3rem);
+            line-height: 1.05;
+            color: #f1f3f7;
+        }
+        .lead {
+            margin: 0;
+            max-width: 56ch;
+            color: var(--text-dim);
+            line-height: 1.6;
+            font-size: 1rem;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .feature-card {
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: rgba(255, 255, 255, 0.03);
+            padding: 12px;
+        }
+        .feature-card strong {
+            display: block;
+            margin-bottom: 6px;
+            color: #dfe5ec;
+            font-size: 0.9rem;
+        }
+        .feature-card span {
+            color: var(--text-dim);
+            font-size: 0.88rem;
+            line-height: 1.45;
+        }
+        .upload-panel {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .upload-panel h2 {
+            margin: 0 0 8px;
+            font-size: 1.15rem;
+            color: #dfe5ec;
+        }
+        .upload-panel p {
+            margin: 0 0 18px;
+            color: var(--text-dim);
+            line-height: 1.5;
         }
         form {
-            display: flex;
+            display: grid;
             gap: 12px;
-            flex-wrap: wrap;
-            align-items: center;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
+        }
+        .file-field {
+            position: relative;
+            display: grid;
+            gap: 10px;
+            border: 1px dashed var(--border-soft);
+            border-radius: var(--radius-md);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0.04));
+            padding: 16px;
+        }
+        .file-field label {
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: rgb(182, 173, 86);
         }
         input[type=file] {
-            border: 1px dashed var(--border);
-            border-radius: 8px;
-            padding: 8px;
-            background: #f7faf8;
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 10px 12px;
+            background: var(--panel-alt);
+            color: var(--text);
+            font: inherit;
+        }
+        input[type=file]::file-selector-button {
+            margin-right: 12px;
+            border: 0;
+            border-radius: var(--radius-sm);
+            background: rgba(86, 136, 182, 0.18);
+            color: #dfe5ec;
+            padding: 8px 12px;
+            font-weight: 700;
+            cursor: pointer;
         }
         button {
             border: 0;
-            border-radius: 8px;
+            border-radius: var(--radius-sm);
             background: var(--accent);
             color: white;
-            padding: 10px 14px;
+            padding: 12px 16px;
             font-weight: 600;
             cursor: pointer;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+            transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+        }
+        button:hover {
+            transform: translateY(-1px);
+            background: #6594c1;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 3px 8px rgba(0, 0, 0, 0.18);
+        }
+        .helper {
+            border-top: 1px solid var(--border);
+            padding-top: 12px;
+            color: var(--text-dim);
+            font-size: 0.88rem;
+            line-height: 1.5;
         }
         .error {
             color: var(--danger);
-            margin: 10px 0;
+            margin: 0 0 12px;
             font-weight: 600;
+            border: 1px solid rgba(199, 84, 80, 0.32);
+            border-radius: var(--radius-sm);
+            background: rgba(199, 84, 80, 0.1);
+            padding: 10px 12px;
+        }
+        @media (max-width: 920px) {
+            .hero {
+                grid-template-columns: 1fr;
+            }
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>HAR Correlation Generator</h1>
+    <div class="hero">
+        <section class="hero-panel">
+            <div class="eyebrow">HAR Analysis Workflow</div>
+            <h1>Upload a HAR file and generate correlation-ready output.</h1>
+            <p class="lead">
+                Inspect requests, extract dynamic values, rewrite correlated calls, and export the result in the same analysis flow used by the result page.
+            </p>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <strong>Trace requests</strong>
+                    <span>Review captured traffic in a transaction-oriented view with request context preserved.</span>
+                </div>
+                <div class="feature-card">
+                    <strong>Extract variables</strong>
+                    <span>Detect reusable values and surface them in a dedicated sidebar for quick validation.</span>
+                </div>
+                <div class="feature-card">
+                    <strong>Export artifacts</strong>
+                    <span>Download modified HAR content, correlation rules, or convert the flow into JMeter JMX.</span>
+                </div>
+            </div>
+        </section>
 
-    <form method="post" enctype="multipart/form-data" action="/analyze">
-        <input type="file" name="harFile" accept=".har,.json" required>
-        <button type="submit">Analyze</button>
-    </form>
+        <aside class="upload-panel">
+            <h2>Start a new analysis</h2>
+            <p>Select a `.har` or `.json` capture file to process it through the correlation generator.</p>
 
-    <div class="error" th:if="${error}" th:text="${error}"></div>
+            <div class="error" th:if="${error}" th:text="${error}"></div>
+
+            <form method="post" enctype="multipart/form-data" action="/analyze">
+                <div class="file-field">
+                    <label for="harFile">HAR file</label>
+                    <input id="harFile" type="file" name="harFile" accept=".har,.json" required>
+                </div>
+                <button type="submit">Analyze HAR</button>
+            </form>
+
+            <div class="helper">
+                Large captures still work better when they focus on a single business flow. Cleaner input produces cleaner variable extraction and fewer false positives.
+            </div>
+        </aside>
+    </div>
 </div>
 </body>
 </html>

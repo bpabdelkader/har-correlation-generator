@@ -6,19 +6,30 @@
     <title>HAR Correlation Generator</title>
     <style>
         :root {
-            --bg: #f4f4ee;
-            --panel: #ffffff;
-            --text: #1f2a2e;
-            --accent: #1b6b7d;
-            --danger: #a31232;
-            --border: #d5ddd8;
+            --bg: #1f2023;
+            --panel: #34373c;
+            --panel-soft: #32353a;
+            --panel-alt: #232528;
+            --text: #dfe1e5;
+            --text-dim: #9da1a8;
+            --accent: rgb(86, 136, 182);
+            --accent-soft: rgb(58, 92, 123);
+            --danger: #c75450;
+            --border: #3f4349;
+            --border-soft: #4c5057;
+            --code-bg: #1f2124;
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --code-surface: #61627263;
+            --request-surface: #ffffff24;
+            --request-border: rgba(78, 148, 206, 0.22);
         }
         * { box-sizing: border-box; }
         body {
             margin: 0;
             padding: 24px;
             font-family: "Segoe UI", Tahoma, sans-serif;
-            background: radial-gradient(circle at top right, #d6e9ee, var(--bg) 55%);
+            background: linear-gradient(180deg, #1e1f22 0%, #232529 100%);
             color: var(--text);
         }
         .container {
@@ -26,8 +37,9 @@
             margin: 0 auto;
             background: var(--panel);
             border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 22px;
+            border-radius: 10px;
+            padding: 18px;
+            box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
         }
         .processed-layout {
             display: grid;
@@ -43,37 +55,23 @@
             position: sticky;
             top: 12px;
         }
-        .download-har {
-            margin-bottom: 10px;
-        }
-        .download-jmx {
-            margin-bottom: 10px;
-        }
+        .download-har,
+        .download-jmx,
         .download-rules {
             margin-bottom: 10px;
-        }
-        .back-link {
-            display: inline-block;
-            margin-bottom: 10px;
-            color: #2f4a52;
-            text-decoration: none;
-            font-weight: 600;
-        }
-        .back-link:hover {
-            text-decoration: underline;
         }
         .download-btn {
             width: 100%;
             border: 0;
-            border-radius: 12px;
+            border-radius: var(--radius-sm);
             background: var(--accent);
             color: white;
-            box-shadow: 0 1px 2px rgba(18, 52, 60, 0.18);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
             transition: transform 0.12s ease, box-shadow 0.12s ease;
         }
         .download-btn:hover {
             transform: translateY(-1px);
-            box-shadow: 0 3px 8px rgba(18, 52, 60, 0.2);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 3px 8px rgba(0, 0, 0, 0.18);
         }
         .variables-sidebar .card {
             margin-top: 0;
@@ -87,51 +85,33 @@
             padding-right: 2px;
         }
         .variable-row {
-            border: 1px solid #e2e7ea;
-            border-radius: 8px;
-            background: #f8fafb;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--panel-alt);
             padding: 6px 8px;
         }
         .variable-key {
-            font-family: "Consolas", monospace;
+            font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
             font-size: 0.82rem;
             font-weight: 700;
-            color: #2f4a52;
+            color: rgb(86, 136, 182);
             margin-bottom: 3px;
             overflow-wrap: anywhere;
             word-break: break-word;
         }
         .variable-value {
-            font-family: "Consolas", monospace;
+            font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
             font-size: 0.8rem;
             line-height: 1.2;
-            color: #22363d;
+            color: var(--text);
             overflow-wrap: anywhere;
             word-break: break-word;
             max-height: 4.8em;
             overflow-y: auto;
         }
-        h1 {
-            margin-top: 0;
-            margin-bottom: 14px;
-            font-size: 1.8rem;
-        }
-        form {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            align-items: center;
-            margin-bottom: 16px;
-        }
-        input[type=file] {
-            border: 1px dashed var(--border);
-            border-radius: 8px;
-            padding: 8px;
-            background: #f7faf8;
-        }
         button {
             border: 0;
-            border-radius: 8px;
+            border-radius: var(--radius-sm);
             background: var(--accent);
             color: white;
             padding: 10px 14px;
@@ -146,9 +126,9 @@
         .card {
             margin-top: 18px;
             border: 1px solid var(--border);
-            border-radius: 10px;
+            border-radius: var(--radius-md);
             padding: 12px;
-            background: #fdfefe;
+            background: var(--panel-soft);
         }
         table {
             width: 100%;
@@ -164,9 +144,9 @@
             margin: 0;
             white-space: pre-wrap;
             word-break: break-word;
-            background: #f6f8fa;
-            border-radius: 8px;
-            border: 1px solid #e7ebee;
+            background: var(--code-bg);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
             padding: 10px;
         }
         .request-item + .request-item {
@@ -174,42 +154,11 @@
             margin-top: 16px;
             padding-top: 16px;
         }
-        .variables-table {
-            table-layout: fixed;
-        }
-        .variables-table th,
-        .variables-table td {
-            padding: 5px 7px;
-            font-size: 0.88rem;
-        }
-        .variables-table th:first-child,
-        .variables-table td:first-child {
-            width: 220px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            font-weight: 700;
-        }
-        .variables-table .value-compact {
-            margin: 0;
-            padding: 5px 7px;
-            border-radius: 6px;
-            border: 1px solid #e7ebee;
-            background: #f6f8fa;
-            font-family: "Consolas", monospace;
-            font-size: 0.84rem;
-            line-height: 1.2;
-            white-space: pre-wrap;
-            overflow-wrap: anywhere;
-            word-break: break-word;
-            max-height: 5.6em;
-            overflow-y: auto;
-        }
         .request-wrap {
             position: relative;
-            --var-bg: #0d452821;
-            --var-border: #0d452844;
-            --var-text: #0d4528;
+            --var-bg: rgba(18, 24, 31, 0.92);
+            --var-border: rgba(112, 182, 227, 0.98);
+            --var-text: #dff4ff;
         }
         .request-wrap + .request-wrap {
             margin-top: 2px;
@@ -220,24 +169,24 @@
             gap: 12px;
         }
         .transaction-group {
-            border: 1px solid #d8e0e8;
-            border-radius: 12px;
-            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            background: var(--panel);
             overflow: hidden;
         }
         .transaction-group[open] {
-            box-shadow: 0 5px 14px rgba(58, 74, 92, 0.05);
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
         }
         .transaction-summary {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            padding: 12px 14px 12px 16px;
+            padding: 10px 12px 10px 14px;
             cursor: pointer;
             list-style: none;
-            background: linear-gradient(90deg, #dceafa 0%, #d6ddd8 100%);
-            border-bottom: 1px solid #d2dbe3;
+            background: linear-gradient(180deg, #6a6c6e 0%, #31353a 100%);
+            border-bottom: 1px solid var(--border-soft);
         }
         .transaction-summary::-webkit-details-marker {
             display: none;
@@ -248,7 +197,7 @@
             height: 0;
             border-top: 7px solid transparent;
             border-bottom: 7px solid transparent;
-            border-left: 10px solid #6f89a3;
+            border-left: 10px solid rgb(182, 173, 86);
             flex: 0 0 auto;
             transform: rotate(0deg);
             transition: transform 0.16s ease;
@@ -258,8 +207,10 @@
         }
         .transaction-title {
             font-weight: 800;
-            color: #44586d;
+            color: #d7dae0;
             flex: 1;
+            font-size: 0.95rem;
+            letter-spacing: 0.01em;
         }
         .transaction-meta {
             display: flex;
@@ -267,15 +218,16 @@
             flex-wrap: wrap;
             justify-content: flex-end;
             font-size: 0.85rem;
-            color: #6b7987;
+            color: var(--text-dim);
         }
         .transaction-badge {
-            border: 1px solid #d3dbe3;
+            border: 1px solid var(--border-soft);
             border-radius: 999px;
             padding: 3px 8px;
-            background: rgba(250, 252, 253, 0.96);
+            background: rgba(76, 137, 199, 0.12);
             font-weight: 700;
             white-space: nowrap;
+            color: rgb(182 173 86);;
         }
         .transaction-content {
             padding: 10px;
@@ -284,8 +236,8 @@
             background: transparent;
         }
         .request-item {
-            border-radius: 10px;
-            padding: 10px;
+            border-radius: var(--radius-sm);
+            padding: 8px;
         }
         .request-item > div + div {
             margin-top: 2px;
@@ -293,13 +245,14 @@
         .request-name {
             font-weight: 700;
             margin-bottom: 8px;
+            color: #dfe5ec;
         }
-        .kind-plain {
-            background: #e4e9edba;
-            border: 1px solid #e4e9ed;
-        }
-        .request-item.kind-plain {
-            padding: 6px 8px;
+        .kind-plain,
+        .kind-source,
+        .kind-modified {
+            background: #ffffff10;
+            border: 1px solid var(--request-border);
+            margin-top: 6px;
         }
         .kind-plain .request-name {
             margin-bottom: 4px;
@@ -319,26 +272,18 @@
             min-height: 1.6em;
             max-height: 4.2em;
         }
-        .kind-source {
-            background: #14197a24;
-            border: 1px solid #cce6d3;
-        }
-        .kind-modified {
-            background: #14197a24;
-            border: 1px solid #cce6d3;
-        }
         .source-link {
             margin-top: 6px;
             margin-bottom: 8px;
             font-size: 0.9rem;
-            color: #2b4f59;
-            border-left: 3px solid #8db8c4;
+            color: rgb(86, 136, 182);
+            border-left: 3px solid rgb(86, 136, 182);
             padding-left: 8px;
         }
         .version-block {
-            border: 1px solid #dfe6ea;
-            border-radius: 8px;
-            background: #fbfcfd;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: #3e393f57;
             padding: 10px;
             margin-top: 10px;
         }
@@ -357,13 +302,8 @@
         }
         .version-label {
             font-weight: 700;
-            color: #34545e;
+            color: rgb(182 173 86);;
             padding-left: 2px;
-        }
-        .block-title {
-            margin-top: 8px;
-            margin-bottom: 6px;
-            font-weight: 600;
         }
         .url-line {
             display: flex;
@@ -375,16 +315,18 @@
         }
         .url-label {
             font-weight: 700;
-            color: #2f4a52;
+            color: #e1e2e3;
             min-width: 34px;
         }
-        .url-value {
-            background: #f6f8fa;
-            border: 1px solid #e7ebee;
-            border-radius: 8px;
+        .url-value,
+        .line-value {
+            background: var(--code-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
             padding: 6px 8px;
-            font-family: "Consolas", monospace;
+            font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
             font-size: 0.9rem;
+            color: #cfd3d8;
             white-space: pre-wrap;
             overflow-wrap: anywhere;
             word-break: break-word;
@@ -416,45 +358,16 @@
         }
         .line-label {
             font-weight: 700;
-            color: #2f4a52;
-        }
-        .line-value {
-            background: #f6f8fa;
-            border: 1px solid #e7ebee;
-            border-radius: 8px;
-            padding: 6px 8px;
-            font-family: "Consolas", monospace;
-            font-size: 0.9rem;
-            white-space: pre-wrap;
-            overflow-wrap: anywhere;
-            word-break: break-word;
-            overflow-x: hidden;
-            overflow-y: auto;
-            max-height: 9.5em;
-            min-height: 2.2em;
-            flex: 1;
-            min-width: 0;
-            max-width: 100%;
+            color: #e1e2e3;
         }
         .header-row .line-value {
             padding: 5px 7px;
             font-size: 0.84rem;
             max-height: 7.2em;
         }
-        .kv {
-            display: grid;
-            grid-template-columns: 170px 1fr;
-            gap: 6px 10px;
-            margin-top: 8px;
-            margin-bottom: 8px;
-        }
-        .kv-key {
-            font-weight: 700;
-            color: #375158;
-        }
         .small {
             font-size: 0.86rem;
-            color: #35515b;
+            color: var(--text-dim);
         }
         .source-sub {
             margin-top: 0;
@@ -462,7 +375,7 @@
             padding-left: 16px;
             max-width: calc(100% - 28px);
             min-width: 0;
-            color: #6a4a1f;
+            color: #a8bfa5;
             font-size: 0.9rem;
             position: relative;
         }
@@ -473,7 +386,7 @@
             top: -1px;
             width: 0;
             height: 14px;
-            border-left: 2px solid #d49a55;
+            border-left: 2px solid #71976a;
         }
         .source-sub::after {
             content: "";
@@ -481,7 +394,7 @@
             left: 8px;
             top: 12px;
             width: 9px;
-            border-top: 2px solid #d49a55;
+            border-top: 2px solid #71976a;
         }
         .source-sub-outside {
             margin-top: 3px;
@@ -489,13 +402,19 @@
         }
         .var-tag {
             display: inline-block;
-            background: var(--var-bg);
+            background: rgb(255 255 255 / 14%);
             border: 1px solid var(--var-border);
-            border-radius: 8px;
-            padding: 6px 10px;
+            border-radius: 9px;
+            padding: 5px 10px;
             font-family: "Consolas", monospace;
             font-size: 0.86rem;
             color: var(--var-text);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+            max-width: 100%;
+            min-width: 0;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
         .var-list {
             display: flex;
@@ -505,19 +424,10 @@
             max-width: 100%;
         }
         .var-chip {
-            background: var(--var-bg);
-            border: 1px solid var(--var-border);
-            border-radius: 6px;
-            padding: 1px 4px;
+            border-radius: 4px;
+            padding: 1px 5px;
             font-weight: 700;
             color: var(--var-text);
-        }
-        .var-tag {
-            max-width: 100%;
-            min-width: 0;
-            white-space: normal;
-            overflow-wrap: anywhere;
-            word-break: break-word;
         }
         @media (max-width: 900px) {
             .processed-layout {
@@ -544,39 +454,39 @@
             margin: 10px 0 14px;
             padding: 10px;
             border: 1px solid var(--border);
-            border-radius: 10px;
-            background: #f7faf8;
+            border-radius: var(--radius-md);
+            background: #ece8df36;
         }
         .filter-input,
         .filter-select {
             width: 100%;
-            border: 1px solid #d0dbd6;
-            border-radius: 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
             padding: 10px 12px;
             font-size: 0.95rem;
-            background: #ffffff;
+            background: #2b2f33;
             color: var(--text);
         }
         .filter-input:focus,
         .filter-select:focus {
-            outline: 2px solid rgba(27, 107, 125, 0.28);
+            outline: 2px solid rgba(76, 137, 199, 0.35);
             outline-offset: 1px;
         }
         .filter-clear {
-            border: 1px solid #155665;
-            border-radius: 10px;
-            background: #ffffff;
-            color: #155665;
+            border: 1px solid var(--border-soft);
+            border-radius: var(--radius-sm);
+            background: #363a40;
+            color: #d7dae0;
             padding: 10px 12px;
             font-weight: 700;
         }
         .filter-clear:hover {
-            background: #eef6f8;
+            background: #40454c;
         }
         .filter-meta {
             justify-self: end;
             font-size: 0.9rem;
-            color: #2f4a52;
+            color: var(--text-dim);
             font-weight: 700;
             white-space: nowrap;
         }
@@ -607,22 +517,19 @@
         .var-match {
             background: repeating-linear-gradient(
                     -45deg,
-                    rgba(255, 227, 84, 0.50) 0px,
-                    rgba(255, 227, 84, 0.50) 6px,
-                    rgba(255, 227, 84, 0.12) 6px,
-                    rgba(255, 227, 84, 0.12) 12px
+                    rgba(255, 214, 102, 0.34) 0px,
+                    rgba(255, 214, 102, 0.34) 6px,
+                    rgba(255, 214, 102, 0.14) 6px,
+                    rgba(255, 214, 102, 0.14) 12px
             ) !important;
-            border-color: rgba(168, 126, 0, 0.55) !important;
-            color: #3b2b00 !important;
+            border-color: rgba(255, 214, 102, 0.58) !important;
+            color: #fff1bf !important;
         }
 
 </style>
 </head>
 <body>
 <div class="container">
-    <a class="back-link" href="/">&larr; Back</a>
-    <h1>HAR Analyzer - Dynamic Correlation</h1>
-
         <div class="processed-layout">
             <div class="variables-sidebar">
                 <div class="download-har">
@@ -718,15 +625,10 @@
                         <div class="inline-versions">
                             <div class="version-col">
                                 <div class="version-label">Before</div>
-                                <div class="version-block">
+                                <div class="version-block before-version">
                                 <div class="url-line">
                                     <div class="url-label">URL</div>
                                     <div class="url-value" th:text="${req.originalUrl}"></div>
-                                </div>
-
-                                <div th:if="${req.originalHeaders != null and !#maps.isEmpty(req.originalHeaders)}" class="line-pair header-row">
-                                    <div class="line-label">Header</div>
-                                    <div class="line-value" th:text="${req.originalHeaders}"></div>
                                 </div>
 
                                 <div th:if="${req.originalBody != null and !req.originalBody.trim().isEmpty()}" class="line-pair">
@@ -738,15 +640,10 @@
 
                             <div class="version-col">
                                 <div class="version-label">After</div>
-                                <div class="version-block">
+                                <div class="version-block after-version">
                                 <div class="url-line">
                                     <div class="url-label">URL</div>
                                     <div class="url-value" th:text="${req.rewrittenUrl}"></div>
-                                </div>
-
-                                <div th:if="${req.rewrittenHeaders != null and !#maps.isEmpty(req.rewrittenHeaders)}" class="line-pair header-row">
-                                    <div class="line-label">Header</div>
-                                    <div class="line-value" th:text="${req.rewrittenHeaders}"></div>
                                 </div>
 
                                 <div th:if="${req.rewrittenBody != null and !req.rewrittenBody.trim().isEmpty()}" class="line-pair">
@@ -765,7 +662,7 @@
                         <div class="var-list">
                             <span class="var-tag"
                                   th:each="entry : ${req.sourceVariables}"
-                                  th:attr="data-var-name=${entry.key}"
+                                  th:attr="data-var-name=${entry.key},data-var-value=${entry.value}"
                                   th:text="${entry.key} + ' = ' + ${entry.value}"></span>
                         </div>
                     </div>
@@ -896,12 +793,22 @@
             if (!Number.isFinite(n)) {
                 n = 1;
             }
-            // Palette constrained to requested color families.
+            // Palette constrained to blue, green, and violet families, with extra weight on blue and green.
             var tones = [
-                { bg: "#0d452821", border: "#0d452833", text: "#0d4528" },
-                { bg: "#0d45282b", border: "#0d452844", text: "#0d4528" },
-                { bg: "#ad1c1c2b", border: "#ad1c1c44", text: "#7f1717" },
-                { bg: "#ad1c1c33", border: "#ad1c1c55", text: "#7f1717" }
+                { bg: "rgba(18, 24, 31, 0.92)", border: "rgba(112, 182, 227, 0.98)", text: "#dff4ff" },
+                { bg: "rgba(15, 25, 17, 0.92)", border: "rgba(74, 150, 90, 0.98)", text: "#cff1d6" },
+                { bg: "rgba(28, 20, 38, 0.92)", border: "rgba(154, 118, 222, 0.98)", text: "#f0e4ff" },
+                { bg: "rgba(21, 29, 38, 0.92)", border: "rgba(92, 162, 210, 0.98)", text: "#d6efff" },
+                { bg: "rgba(17, 27, 18, 0.92)", border: "rgba(88, 170, 104, 0.98)", text: "#d9f7de" },
+                { bg: "rgba(24, 18, 34, 0.92)", border: "rgba(136, 104, 202, 0.98)", text: "#eadcff" },
+                { bg: "rgba(24, 32, 40, 0.92)", border: "rgba(132, 196, 236, 0.98)", text: "#e3f6ff" },
+                { bg: "rgba(12, 23, 15, 0.92)", border: "rgba(96, 190, 118, 0.98)", text: "#e0fbe5" },
+                { bg: "rgba(32, 22, 44, 0.92)", border: "rgba(176, 140, 236, 0.98)", text: "#f4ecff" },
+                { bg: "rgba(28, 36, 46, 0.92)", border: "rgba(152, 214, 247, 0.98)", text: "#effaff" },
+                { bg: "rgba(20, 31, 22, 0.92)", border: "rgba(124, 208, 141, 0.98)", text: "#e8ffec" },
+                { bg: "rgba(36, 26, 48, 0.92)", border: "rgba(194, 162, 245, 0.98)", text: "#f8f0ff" },
+                { bg: "rgba(16, 28, 36, 0.92)", border: "rgba(118, 192, 226, 0.98)", text: "#e2f7ff" },
+                { bg: "rgba(16, 29, 18, 0.92)", border: "rgba(108, 198, 126, 0.98)", text: "#e5ffea" }
             ];
             return tones[Math.abs(n) % tones.length];
         }
@@ -947,6 +854,197 @@
             });
         }
 
+        function escapeRegExp(str) {
+            return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        function highlightVariableValues(text, variables) {
+            var original = (text || '').toString();
+            if (!original || !variables || !variables.length) {
+                return escapeHtml(original);
+            }
+
+            var matches = [];
+            variables.forEach(function (variable) {
+                var value = (variable.value || '').toString();
+                var name = (variable.name || '').toString();
+                if (!value || !name) {
+                    return;
+                }
+                var regex = new RegExp(escapeRegExp(value), 'g');
+                var match;
+                while ((match = regex.exec(original)) !== null) {
+                    matches.push({
+                        start: match.index,
+                        end: match.index + value.length,
+                        name: name,
+                        value: value
+                    });
+                    if (regex.lastIndex === match.index) {
+                        regex.lastIndex++;
+                    }
+                }
+            });
+
+            if (!matches.length) {
+                return escapeHtml(original);
+            }
+
+            return renderVariableMatches(original, matches);
+        }
+
+        function renderVariableMatches(original, matches) {
+            matches.sort(function (a, b) {
+                if (a.start !== b.start) {
+                    return a.start - b.start;
+                }
+                return (b.end - b.start) - (a.end - a.start);
+            });
+
+            var filtered = [];
+            var cursor = -1;
+            matches.forEach(function (match) {
+                if (match.start < cursor) {
+                    return;
+                }
+                filtered.push(match);
+                cursor = match.end;
+            });
+
+            var out = '';
+            var last = 0;
+            filtered.forEach(function (match) {
+                if (match.start > last) {
+                    out += escapeHtml(original.slice(last, match.start));
+                }
+                out += '<span class="var-chip" data-var-name="' + escapeHtml(match.name) + '">' + escapeHtml(match.value) + '</span>';
+                last = match.end;
+            });
+            if (last < original.length) {
+                out += escapeHtml(original.slice(last));
+            }
+            return out;
+        }
+
+        function highlightParamValuesFromAfter(beforeText, afterText) {
+            var beforeRaw = (beforeText || '').toString();
+            var afterRaw = (afterText || '').toString();
+            if (!beforeRaw || !afterRaw || afterRaw.indexOf('${') === -1) {
+                return null;
+            }
+
+            var variableByParam = new Map();
+            var afterRegex = /([A-Za-z0-9_]+)=\$\{([^}]+)}/g;
+            var match;
+            while ((match = afterRegex.exec(afterRaw)) !== null) {
+                variableByParam.set(match[1], match[2]);
+            }
+            if (!variableByParam.size) {
+                return null;
+            }
+
+            var matches = [];
+            var beforeRegex = /([A-Za-z0-9_]+)=([^&#\s]+)/g;
+            while ((match = beforeRegex.exec(beforeRaw)) !== null) {
+                var paramName = match[1];
+                var variableName = variableByParam.get(paramName);
+                var value = match[2];
+                if (!variableName || !value) {
+                    continue;
+                }
+                var valueOffset = match[0].indexOf(value);
+                if (valueOffset < 0) {
+                    continue;
+                }
+                var start = match.index + valueOffset;
+                matches.push({
+                    start: start,
+                    end: start + value.length,
+                    name: variableName,
+                    value: value
+                });
+            }
+
+            if (!matches.length) {
+                return null;
+            }
+
+            return renderVariableMatches(beforeRaw, matches);
+        }
+
+        function deriveVariableValuesFromPair(beforeText, afterText) {
+            var beforeRaw = (beforeText || '').toString();
+            var afterRaw = (afterText || '').toString();
+            if (!beforeRaw || !afterRaw || afterRaw.indexOf('${') === -1) {
+                return [];
+            }
+
+            var names = [];
+            var pattern = '^';
+            var lastIndex = 0;
+            var regex = /\$\{([^}]+)}/g;
+            var match;
+
+            while ((match = regex.exec(afterRaw)) !== null) {
+                pattern += escapeRegExp(afterRaw.slice(lastIndex, match.index));
+                pattern += '([\\s\\S]+?)';
+                names.push(match[1]);
+                lastIndex = match.index + match[0].length;
+            }
+
+            pattern += escapeRegExp(afterRaw.slice(lastIndex));
+            pattern += '$';
+
+            try {
+                var compiled = new RegExp(pattern);
+                var result = compiled.exec(beforeRaw);
+                if (!result) {
+                    return [];
+                }
+                return names.map(function (name, index) {
+                    return {
+                        name: name,
+                        value: result[index + 1] || ''
+                    };
+                }).filter(function (entry) {
+                    return entry.name && entry.value;
+                });
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function extractParamVariablePairs(beforeText, afterText) {
+            var beforeRaw = (beforeText || '').toString();
+            var afterRaw = (afterText || '').toString();
+            if (!beforeRaw || !afterRaw || afterRaw.indexOf('${') === -1) {
+                return [];
+            }
+
+            var beforePairs = new Map();
+            var pairRegex = /([A-Za-z0-9_]+)=([^&#\s]+)/g;
+            var match;
+            while ((match = pairRegex.exec(beforeRaw)) !== null) {
+                beforePairs.set(match[1], match[2]);
+            }
+
+            var out = [];
+            var afterRegex = /([A-Za-z0-9_]+)=\$\{([^}]+)}/g;
+            while ((match = afterRegex.exec(afterRaw)) !== null) {
+                var paramName = match[1];
+                var variableName = match[2];
+                var value = beforePairs.get(paramName);
+                if (paramName && variableName && value) {
+                    out.push({
+                        name: variableName,
+                        value: value
+                    });
+                }
+            }
+
+            return out;
+        }
+
         function applyVariableLotColors() {
             var lotByVariable = new Map();
 
@@ -988,10 +1086,72 @@
             });
         }
 
-        var nodes = document.querySelectorAll('.kind-modified .url-value, .kind-modified .line-value');
-        nodes.forEach(function (node) {
+        var afterNodes = document.querySelectorAll('.kind-modified .after-version .url-value, .kind-modified .after-version .line-value');
+        afterNodes.forEach(function (node) {
             var raw = node.textContent || '';
             node.innerHTML = highlightVars(raw);
+        });
+
+        var modifiedWraps = document.querySelectorAll('.request-wrap[data-kind="MODIFIED"]');
+        modifiedWraps.forEach(function (wrap) {
+            var usedVariableNames = new Set(
+                Array.prototype.slice.call(wrap.querySelectorAll('.after-version .var-chip[data-var-name]')).map(function (chip) {
+                    return (chip.getAttribute('data-var-name') || '').trim();
+                }).filter(function (name) {
+                    return !!name;
+                })
+            );
+
+            var variableMap = new Map();
+
+            Array.prototype.slice.call(wrap.querySelectorAll('.source-sub .var-tag[data-var-name][data-var-value]')).map(function (tag) {
+                return {
+                    name: (tag.getAttribute('data-var-name') || '').trim(),
+                    value: tag.getAttribute('data-var-value') || ''
+                };
+            }).filter(function (entry) {
+                return entry.name && entry.value && usedVariableNames.has(entry.name);
+            }).forEach(function (entry) {
+                variableMap.set(entry.name, entry);
+            });
+
+            var beforeNodes = Array.prototype.slice.call(wrap.querySelectorAll('.before-version .url-value, .before-version .line-value'));
+            var afterNodes = Array.prototype.slice.call(wrap.querySelectorAll('.after-version .url-value, .after-version .line-value'));
+
+            beforeNodes.forEach(function (node, index) {
+                var beforeText = node.textContent || '';
+                var afterText = afterNodes[index] ? (afterNodes[index].textContent || '') : '';
+
+                extractParamVariablePairs(beforeText, afterText).forEach(function (entry) {
+                    if (entry.name && entry.value && usedVariableNames.has(entry.name)) {
+                        variableMap.set(entry.name, entry);
+                    }
+                });
+
+                deriveVariableValuesFromPair(beforeText, afterText).forEach(function (entry) {
+                    if (entry.name && entry.value && usedVariableNames.has(entry.name) && !variableMap.has(entry.name)) {
+                        variableMap.set(entry.name, entry);
+                    }
+                });
+            });
+
+            var variables = Array.prototype.slice.call(variableMap.values()).sort(function (a, b) {
+                return b.value.length - a.value.length;
+            });
+
+            beforeNodes.forEach(function (node, index) {
+                var raw = node.textContent || '';
+                var afterText = afterNodes[index] ? (afterNodes[index].textContent || '') : '';
+                var directHighlight = highlightParamValuesFromAfter(raw, afterText);
+                if (directHighlight) {
+                    node.innerHTML = directHighlight;
+                    return;
+                }
+                if (!variables.length) {
+                    return;
+                }
+                node.innerHTML = highlightVariableValues(raw, variables);
+            });
         });
 
         groupRequestsByTransaction();

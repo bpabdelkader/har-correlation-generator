@@ -5,6 +5,7 @@
 
 *JMeter & Gatling Load Testing Made Easier*
 
+image:https://i.postimg.cc/vHTNnWh1/1.png[]
 ---
 
 ## 📖 What is this project?
@@ -48,15 +49,17 @@ Perfect for anyone who scripts load tests with **JMeter**, **Gatling**, **k6** o
 ---
 
 ## 📸 Screenshots
+.Requests regrouped into Transactions based on elapsed time
+image:https://i.postimg.cc/X7BRrRn4/11.gif[]
 
 .Variable highlighting – Detected variables & reuse locations
-image:https://i.postimg.cc/76xtJRXM/1.png[]
+image:https://i.postimg.cc/9fSm3Gpt/12.gif[]
 
 .Correlation Rules Export
-image:https://i.postimg.cc/jqpBqMPw/2.png[]
+image:https://i.postimg.cc/442rWJWv/13.gif[]
 
 .Final Correlated HAR Export
-image:https://i.postimg.cc/k5Yh0s7B/3.png[]
+image:https://i.postimg.cc/ncchDcCX/14.gif[]
 
 ---
 
