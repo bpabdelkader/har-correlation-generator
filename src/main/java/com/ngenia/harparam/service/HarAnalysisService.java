@@ -181,6 +181,7 @@ public class HarAnalysisService {
             String rewrittenUrl = modifiedRequest.path("url").asText("");
             String originalUrl = originalRequest.path("url").asText("");
             String name = deriveRequestName(rewrittenUrl);
+            String startedDateTime = originalEntryNode.path("startedDateTime").asText("");
 
             Map<String, String> originalHeaders = extractHeaders(originalRequest.path("headers"));
             Map<String, String> rewrittenHeaders = extractHeaders(modifiedRequest.path("headers"));
@@ -242,6 +243,7 @@ public class HarAnalysisService {
                     "MODIFIED",
                     name,
                     method,
+                    startedDateTime,
                     sourceRef == null ? null : sourceRef.index(),
                     sourceRef == null ? null : sourceRef.name(),
                     sourceRef == null ? null : sourceRef.method(),
@@ -284,6 +286,7 @@ public class HarAnalysisService {
                         modified.kind(),
                         modified.name(),
                         modified.method(),
+                        modified.startedDateTime(),
                         modified.sourceIndex(),
                         modified.sourceName(),
                         modified.sourceMethod(),
@@ -310,12 +313,14 @@ public class HarAnalysisService {
             String url = originalRequest.path("url").asText("");
             String name = deriveRequestName(url);
             String body = originalRequest.path("postData").path("text").asText("");
+            String startedDateTime = originalEntryNode.path("startedDateTime").asText("");
             String kind = sourceIndicesUsed.contains(globalIndex) ? "SOURCE" : "PLAIN";
             requests.add(new RewrittenRequest(
                     globalIndex,
                     kind,
                     name,
                     method,
+                    startedDateTime,
                     null,
                     null,
                     null,

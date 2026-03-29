@@ -13,7 +13,7 @@
 
     <groupId>com.ngenia</groupId>
     <artifactId>har-correlation-generator</artifactId>
-    <version>1.0.2-SNAPSHOT</version>
+    <version>1.0.3-SNAPSHOT</version>
     <name>har-correlation-generator</name>
     <description>HAR correlation: extract dynamic values and rewrite requests</description>
 

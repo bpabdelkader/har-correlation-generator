@@ -64,9 +64,10 @@
         }
         .download-btn {
             width: 100%;
-            border: 1px solid #155665;
+            border: 0;
             border-radius: 12px;
-            background: linear-gradient(180deg, #2b7f92 0%, #1b6b7d 100%);
+            background: var(--accent);
+            color: white;
             box-shadow: 0 1px 2px rgba(18, 52, 60, 0.18);
             transition: transform 0.12s ease, box-shadow 0.12s ease;
         }
@@ -212,6 +213,75 @@
         }
         .request-wrap + .request-wrap {
             margin-top: 2px;
+        }
+        .transactions-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .transaction-group {
+            border: 1px solid #d8e0e8;
+            border-radius: 12px;
+            background: #ffffff;
+            overflow: hidden;
+        }
+        .transaction-group[open] {
+            box-shadow: 0 5px 14px rgba(58, 74, 92, 0.05);
+        }
+        .transaction-summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px 12px 16px;
+            cursor: pointer;
+            list-style: none;
+            background: linear-gradient(90deg, #dceafa 0%, #d6ddd8 100%);
+            border-bottom: 1px solid #d2dbe3;
+        }
+        .transaction-summary::-webkit-details-marker {
+            display: none;
+        }
+        .transaction-summary::before {
+            content: "";
+            width: 0;
+            height: 0;
+            border-top: 7px solid transparent;
+            border-bottom: 7px solid transparent;
+            border-left: 10px solid #6f89a3;
+            flex: 0 0 auto;
+            transform: rotate(0deg);
+            transition: transform 0.16s ease;
+        }
+        .transaction-group[open] .transaction-summary::before {
+            transform: rotate(90deg);
+        }
+        .transaction-title {
+            font-weight: 800;
+            color: #44586d;
+            flex: 1;
+        }
+        .transaction-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            font-size: 0.85rem;
+            color: #6b7987;
+        }
+        .transaction-badge {
+            border: 1px solid #d3dbe3;
+            border-radius: 999px;
+            padding: 3px 8px;
+            background: rgba(250, 252, 253, 0.96);
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .transaction-content {
+            padding: 10px;
+            max-height: 72vh;
+            overflow-y: auto;
+            background: transparent;
         }
         .request-item {
             border-radius: 10px;
@@ -595,10 +665,11 @@
                     <button id="filterClear" class="filter-clear" type="button">Clear</button>
                     <div class="filter-meta" id="filterMeta"></div>
                 </div>
+<div id="transactionsList" class="transactions-list">
 <div class="request-wrap"
                      th:each="req : ${result.rewrittenRequests}"
                      th:classappend="${req.kind == 'SOURCE'} ? ' source-group' : ''"
-                     th:attr="data-kind=${req.kind},data-index=${req.index},data-source-index=${req.sourceIndex}">
+                     th:attr="data-kind=${req.kind},data-index=${req.index},data-source-index=${req.sourceIndex},data-started-at=${req.startedDateTime},data-request-name=${req.name}">
                     <div class="request-item"
                          th:classappend="${req.kind == 'SOURCE'} ? ' kind-source' : (${req.kind == 'MODIFIED'} ? ' kind-modified' : ' kind-plain')">
                         <div class="request-name" th:text="${'[T' + (req.index < 10 ? '0' + req.index : req.index) + ']: ' + req.method + ' - ' + req.name}"></div>
@@ -699,11 +770,127 @@
                         </div>
                     </div>
                 </div>
+</div>
             </div>
         </div>
 </div>
 <script>
     (function () {
+        function parseTimestamp(raw) {
+            var text = (raw || '').toString().trim();
+            if (!text) {
+                return NaN;
+            }
+            var value = Date.parse(text);
+            return Number.isFinite(value) ? value : NaN;
+        }
+
+        function pad2(value) {
+            return String(value).padStart(2, '0');
+        }
+
+        function normalizeTransactionLabel(raw) {
+            var text = (raw || '').toString().trim();
+            if (!text || text === '/') {
+                return 'Home';
+            }
+
+            text = text.replace(/[_\s]+/g, '-');
+            text = text.replace(/[^A-Za-z0-9-]+/g, '-');
+            text = text.replace(/-+/g, '-');
+            text = text.replace(/^-|-$/g, '');
+            if (!text) {
+                return 'Home';
+            }
+
+            return text.charAt(0).toUpperCase() + text.slice(1);
+        }
+
+        function transactionTitleFor(wrap, fallbackIndex) {
+            var reqName = (wrap.getAttribute('data-request-name') || '').trim();
+            var label = normalizeTransactionLabel(reqName);
+            return 'SC01_' + pad2(fallbackIndex) + '-' + label;
+        }
+
+        function createTransactionGroup(wraps, groupIndex) {
+            var details = document.createElement('details');
+            details.className = 'transaction-group';
+
+            var summary = document.createElement('summary');
+            summary.className = 'transaction-summary';
+
+            var title = document.createElement('div');
+            title.className = 'transaction-title';
+            title.textContent = transactionTitleFor(wraps[0], groupIndex);
+
+            var meta = document.createElement('div');
+            meta.className = 'transaction-meta';
+
+            var count = document.createElement('span');
+            count.className = 'transaction-badge';
+            count.textContent = wraps.length + ' calls';
+            meta.appendChild(count);
+
+            summary.appendChild(title);
+            summary.appendChild(meta);
+            details.appendChild(summary);
+
+            var content = document.createElement('div');
+            content.className = 'transaction-content';
+            wraps.forEach(function (wrap) {
+                content.appendChild(wrap);
+            });
+            details.appendChild(content);
+            return details;
+        }
+
+        function groupRequestsByTransaction() {
+            var list = document.getElementById('transactionsList');
+            if (!list) {
+                return;
+            }
+
+            var wraps = Array.prototype.slice.call(list.querySelectorAll(':scope > .request-wrap'));
+            if (!wraps.length) {
+                return;
+            }
+
+            var groups = [];
+            var currentGroup = [];
+            var previousTs = NaN;
+
+            wraps.forEach(function (wrap) {
+                var ts = parseTimestamp(wrap.getAttribute('data-started-at'));
+                var shouldStartNew = !currentGroup.length;
+                if (!shouldStartNew) {
+                    if (!Number.isFinite(ts) || !Number.isFinite(previousTs)) {
+                        shouldStartNew = true;
+                    } else {
+                        shouldStartNew = (ts - previousTs) >= 1000;
+                    }
+                }
+
+                if (shouldStartNew) {
+                    if (currentGroup.length) {
+                        groups.push(currentGroup);
+                    }
+                    currentGroup = [wrap];
+                } else {
+                    currentGroup.push(wrap);
+                }
+                previousTs = ts;
+            });
+
+            if (currentGroup.length) {
+                groups.push(currentGroup);
+            }
+
+            list.innerHTML = '';
+            groups.forEach(function (group, index) {
+                list.appendChild(createTransactionGroup(group, index + 1));
+            });
+        }
+
         function paletteForLot(lotId) {
             var n = Number(lotId);
             if (!Number.isFinite(n)) {
@@ -807,6 +994,7 @@
             node.innerHTML = highlightVars(raw);
         });
 
+        groupRequestsByTransaction();
         applySourceColors();
         applyVariableLotColors();
     })();
@@ -960,6 +1148,16 @@ var total = wraps.length;
                     shown++;
                 } else {
                     wrap.classList.add('is-hidden');
+                }
+            });
+
+            var groups = Array.prototype.slice.call(document.querySelectorAll('.transaction-group'));
+            groups.forEach(function (group) {
+                var visibleWraps = group.querySelectorAll('.request-wrap:not(.is-hidden)');
+                if (visibleWraps.length) {
+                    group.classList.remove('is-hidden');
+                } else {
+                    group.classList.add('is-hidden');
                 }
             });
 
