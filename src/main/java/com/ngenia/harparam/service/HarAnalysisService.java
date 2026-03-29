@@ -859,7 +859,7 @@ public class HarAnalysisService {
             return existing;
         }
 
-        SourceMatch sourceMatch = findFirstSourceMatch(normalizedValue, previousResponses);
+        SourceMatch sourceMatch = findFirstSourceMatch(parameterName, normalizedValue, previousResponses);
         if (sourceMatch == null) {
             return null;
         }
@@ -889,37 +889,72 @@ public class HarAnalysisService {
         return new ResponseSnapshot(bodyText, headers, requestRef);
     }
 
-    private SourceMatch findFirstSourceMatch(String value, List<ResponseSnapshot> previousResponses) {
+    private SourceMatch findFirstSourceMatch(String parameterName, String value, List<ResponseSnapshot> previousResponses) {
         for (ResponseSnapshot snapshot : previousResponses) {
+            String requestUrl = snapshot.requestRef().url();
+            if (containsNamedOccurrence(requestUrl, parameterName, value)) {
+                return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, requestUrl, parameterName);
+            }
+
+            String requestBody = snapshot.requestRef().body();
+            if (containsNamedOccurrence(requestBody, parameterName, value)) {
+                return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, requestBody, parameterName);
+            }
+
+            String body = snapshot.bodyText();
+            if (containsNamedOccurrence(body, parameterName, value)) {
+                return new SourceMatch(snapshot.requestRef(), "BODY", null, null, body, parameterName);
+            }
+
             for (Map.Entry<String, String> header : snapshot.headers().entrySet()) {
                 String headerValue = header.getValue();
                 if (headerValue != null && headerValue.contains(value)) {
-                    return new SourceMatch(snapshot.requestRef(), "HEADER", header.getKey(), headerValue, snapshot.bodyText());
+                    return new SourceMatch(snapshot.requestRef(), "HEADER", header.getKey(), headerValue, snapshot.bodyText(), parameterName);
                 }
             }
-            String body = snapshot.bodyText();
             if (body != null && body.contains(value)) {
-                return new SourceMatch(snapshot.requestRef(), "BODY", null, null, body);
+                return new SourceMatch(snapshot.requestRef(), "BODY", null, null, body, parameterName);
             }
 
             // Fallback: some correlated values are propagated from prior request URL/body,
             // not only from response payload/headers.
-            String requestBody = snapshot.requestRef().body();
             if (requestBody != null && requestBody.contains(value)) {
-                return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, requestBody);
+                return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, requestBody, parameterName);
             }
-            String requestUrl = snapshot.requestRef().url();
             if (requestUrl != null) {
-                if (requestUrl.contains(value)) {
-                    return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, requestBody);
-                }
+                String directNeedle = Objects.toString(parameterName, "") + "=" + value;
                 String decodedUrl = decode(requestUrl);
+                if (!Objects.toString(parameterName, "").isBlank() && requestUrl.contains(directNeedle)) {
+                    return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, requestUrl, parameterName);
+                }
+                if (!Objects.toString(parameterName, "").isBlank() && !decodedUrl.equals(requestUrl) && decodedUrl.contains(directNeedle)) {
+                    return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, decodedUrl, parameterName);
+                }
+                if (requestUrl.contains(value)) {
+                    return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, requestUrl, parameterName);
+                }
                 if (!decodedUrl.equals(requestUrl) && decodedUrl.contains(value)) {
-                    return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, requestBody);
+                    return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, decodedUrl, parameterName);
                 }
             }
         }
         return null;
+    }
+
+    private boolean containsNamedOccurrence(String text, String parameterName, String value) {
+        if (text == null || text.isBlank() || parameterName == null || parameterName.isBlank() || value == null || value.isBlank()) {
+            return false;
+        }
+
+        if (text.contains(parameterName + "=" + value)
+                || text.contains(parameterName + "\\u003d" + value)
+                || text.contains("\"" + parameterName + "\":\"" + value + "\"")
+                || text.contains("\\\"" + parameterName + "\\\":\\\"" + value + "\\\"")) {
+            return true;
+        }
+
+        String decoded = decode(text);
+        return !decoded.equals(text) && decoded.contains(parameterName + "=" + value);
     }
 
     private String uniqueVariableName(String sourceName, Set<String> usedNames) {
@@ -1131,22 +1166,41 @@ public class HarAnalysisService {
         String requestUrl = match.requestRef() == null ? "" : Objects.toString(match.requestRef().url(), "");
         String requestBody = match.requestRef() == null ? "" : Objects.toString(match.requestRef().body(), "");
 
-        String candidate = firstContaining(value, response, requestUrl, requestBody);
-        if (candidate.isBlank()) {
-            return null;
-        }
-
-        String urlParamRegex = tryBuildUrlParamRegex(candidate, value);
+        String urlParamRegex = firstNonBlank(
+                tryBuildUrlParamRegex(requestUrl, value, match.parameterName()),
+                tryBuildUrlParamRegex(response, value, match.parameterName()),
+                tryBuildUrlParamRegex(requestBody, value, match.parameterName())
+        );
         if (urlParamRegex != null) {
             return urlParamRegex;
         }
 
-        String jsonFieldRegex = tryBuildJsonStringFieldRegex(candidate, value);
+        String jsonFieldRegex = firstNonBlank(
+                tryBuildJsonStringFieldRegex(response, value, match.parameterName()),
+                tryBuildJsonStringFieldRegex(requestBody, value, match.parameterName()),
+                tryBuildJsonStringFieldRegex(requestUrl, value, match.parameterName())
+        );
         if (jsonFieldRegex != null) {
             return jsonFieldRegex;
         }
 
+        String candidate = firstContaining(value, response, requestUrl, requestBody);
+        if (candidate.isBlank()) {
+            return null;
+        }
         return buildDelimitedRegex(candidate, value, 16, 16);
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private String firstContaining(String needle, String... candidates) {
@@ -1164,66 +1218,77 @@ public class HarAnalysisService {
         return "";
     }
 
-    private String tryBuildUrlParamRegex(String text, String value) {
+    private String tryBuildUrlParamRegex(String text, String value, String parameterName) {
         if (text == null || text.isBlank() || value == null || value.isBlank()) {
             return null;
         }
 
-        int idx = text.indexOf(value);
-        if (idx < 0) {
+        String normalizedParameterName = Objects.toString(parameterName, "").trim();
+        if (normalizedParameterName.isBlank()) {
             return null;
         }
 
-        int lastQuestion = text.lastIndexOf('?', idx);
-        int lastAmp = text.lastIndexOf('&', idx);
-        int paramDelim = Math.max(lastQuestion, lastAmp);
-        int eq = text.lastIndexOf('=', idx);
-        if (eq < 0 || eq <= paramDelim) {
-            return null;
-        }
+        String[] separators = {"?", "&", "\\u0026", "&amp;", "%3F", "%26"};
+        String[] assignments = {"=", "\\u003d", "%3D"};
+        String[] suffixes = {"&", "\\u0026", "&amp;", "#", "\\u0023", "%26", "%23"};
 
-        String paramName = text.substring(paramDelim + 1, eq).trim();
-        if (paramName.isBlank() || paramName.contains(" ") || paramName.contains("\"")) {
-            return null;
-        }
-
-        String lastSegment = lastPathSegment(text);
-        String prefix;
-        if (paramDelim >= 0 && text.charAt(paramDelim) == '?' && !lastSegment.isBlank()) {
-            prefix = lastSegment + "?" + paramName + "=";
-        } else {
-            prefix = paramName + "=";
-        }
-
-        String suffix = "";
-        int afterIdx = idx + value.length();
-        if (afterIdx < text.length()) {
-            char next = text.charAt(afterIdx);
-            if (next == '&') {
-                suffix = "&";
-            } else if (next == '#') {
-                suffix = "#";
-            } else if (next == '"') {
-                suffix = "\"";
+        for (String separator : separators) {
+            for (String assignment : assignments) {
+                String needle = separator + normalizedParameterName + assignment + value;
+                int start = text.indexOf(needle);
+                if (start < 0) {
+                    continue;
+                }
+                String prefix = buildUrlPrefix(text, start, separator, normalizedParameterName, assignment);
+                int valueStart = start + separator.length() + normalizedParameterName.length() + assignment.length();
+                int afterIdx = valueStart + value.length();
+                String regex = appendUrlSuffix(text, prefix, afterIdx, suffixes);
+                if (regex != null) {
+                    return regex;
+                }
             }
         }
 
+        for (String assignment : assignments) {
+            String needle = normalizedParameterName + assignment + value;
+            int start = text.indexOf(needle);
+            if (start < 0) {
+                continue;
+            }
+            String prefix = normalizedParameterName + assignment;
+            int afterIdx = start + normalizedParameterName.length() + assignment.length() + value.length();
+            String regex = appendUrlSuffix(text, prefix, afterIdx, suffixes);
+            if (regex != null) {
+                return regex;
+            }
+        }
+        return null;
+    }
+
+    private String buildUrlPrefix(String text, int start, String separator, String parameterName, String assignment) {
+        if ("?".equals(separator)) {
+            String lastSegment = lastPathSegment(text);
+            if (!lastSegment.isBlank()) {
+                return lastSegment + separator + parameterName + assignment;
+            }
+        }
+        return parameterName + assignment;
+    }
+
+    private String appendUrlSuffix(String text, String prefix, int afterIdx, String[] suffixes) {
         StringBuilder regex = new StringBuilder(96);
-        regex.append("(?s)");
         regex.append(regexEscapeLiteral(prefix));
         regex.append("(.+?)");
-
-        if (!suffix.isBlank()) {
-            regex.append(regexEscapeLiteral(suffix));
-            return regex.toString();
-        }
 
         if (afterIdx >= text.length()) {
             return regex.toString();
         }
 
-        if (text.indexOf('&', afterIdx) >= 0) {
-            regex.append("(?:&|$)");
+        for (String suffix : suffixes) {
+            if (text.startsWith(suffix, afterIdx)) {
+                regex.append(regexEscapeLiteral(suffix));
+                return regex.toString();
+            }
         }
 
         return regex.toString();
@@ -1249,9 +1314,22 @@ public class HarAnalysisService {
         }
     }
 
-    private String tryBuildJsonStringFieldRegex(String text, String value) {
+    private String tryBuildJsonStringFieldRegex(String text, String value, String parameterName) {
         if (text == null || text.isBlank() || value == null || value.isBlank()) {
             return null;
+        }
+
+        String expectedKey = Objects.toString(parameterName, "").trim();
+        if (!expectedKey.isBlank()) {
+            String plainNeedle = "\"" + expectedKey + "\":\"" + value + "\"";
+            if (text.contains(plainNeedle)) {
+                return "\"" + regexEscapeLiteral(expectedKey) + "\"\\s*:\\s*\"(.+?)\"";
+            }
+
+            String escapedNeedle = "\\\"" + expectedKey + "\\\":\\\"" + value + "\\\"";
+            if (text.contains(escapedNeedle)) {
+                return "\\\\\"" + regexEscapeLiteral(expectedKey) + "\\\\\":\\\\\"(.+?)\\\\\"";
+            }
         }
 
         int idx = text.indexOf(value);
@@ -1265,8 +1343,8 @@ public class HarAnalysisService {
             int valueStart = m.end();
             if (valueStart == idx) {
                 String key = m.group(1);
-                if (key != null && !key.isBlank()) {
-                    return "(?s)\"" + regexEscapeLiteral(key) + "\"\\s*:\\s*\"(.+?)\"";
+                if (key != null && !key.isBlank() && (expectedKey.isBlank() || key.equals(expectedKey))) {
+                    return "\"" + regexEscapeLiteral(key) + "\"\\s*:\\s*\"(.+?)\"";
                 }
             }
         }
@@ -1284,13 +1362,10 @@ public class HarAnalysisService {
             return null;
         }
 
-        int beforeStart = Math.max(0, idx - Math.max(0, beforeLimit));
-        int afterEnd = Math.min(haystack.length(), idx + value.length() + Math.max(0, afterLimit));
-        String before = haystack.substring(beforeStart, idx);
-        String after = haystack.substring(idx + value.length(), afterEnd);
+        String before = extractMinimalPrefix(haystack, idx, beforeLimit);
+        String after = extractMinimalSuffix(haystack, idx + value.length(), afterLimit);
 
         StringBuilder regex = new StringBuilder(128);
-        regex.append("(?s)");
         if (!before.isEmpty()) {
             regex.append(regexEscapeLiteral(before));
         }
@@ -1299,6 +1374,45 @@ public class HarAnalysisService {
             regex.append(regexEscapeLiteral(after));
         }
         return regex.toString();
+    }
+
+    private String extractMinimalPrefix(String text, int valueStart, int beforeLimit) {
+        if (text == null || text.isBlank() || valueStart <= 0) {
+            return "";
+        }
+
+        int lowerBound = Math.max(0, valueStart - Math.max(0, beforeLimit));
+        int start = valueStart;
+        while (start > lowerBound) {
+            char current = text.charAt(start - 1);
+            if (Character.isLetterOrDigit(current) || current == '_' || current == '-' || current == '=' || current == ':') {
+                start--;
+                continue;
+            }
+            break;
+        }
+        return text.substring(start, valueStart);
+    }
+
+    private String extractMinimalSuffix(String text, int valueEnd, int afterLimit) {
+        if (text == null || text.isBlank() || valueEnd < 0 || valueEnd >= text.length()) {
+            return "";
+        }
+
+        int upperBound = Math.min(text.length(), valueEnd + Math.max(0, afterLimit));
+        int end = valueEnd;
+        while (end < upperBound) {
+            char current = text.charAt(end);
+            if (!Character.isLetterOrDigit(current) && current != '_' && current != '-') {
+                end++;
+                if (current == '\\' && end < upperBound) {
+                    end++;
+                }
+                break;
+            }
+            break;
+        }
+        return text.substring(valueEnd, end);
     }
 
     private String regexEscapeLiteral(String text) {
@@ -1335,7 +1449,8 @@ public class HarAnalysisService {
             String extractionType,
             String headerName,
             String headerValue,
-            String responseBody
+            String responseBody,
+            String parameterName
     ) {
     }
 
