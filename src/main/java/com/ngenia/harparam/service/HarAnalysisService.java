@@ -32,6 +32,10 @@ public class HarAnalysisService {
 
     private static final Pattern VAR_SAFE = Pattern.compile("[^a-zA-Z0-9_]");
     private static final Pattern VAR_TOKEN = Pattern.compile("\\$\\{([^}]+)}");
+    private static final Pattern JSON_STRING_FIELD_PREFIX = Pattern.compile("\"([^\"]{1,80})\"\\s*:\\s*\"");
+    private static final String[] URL_PARAM_SEPARATORS = {"?", "&", "\\u0026", "&amp;", "%3F", "%26"};
+    private static final String[] URL_PARAM_ASSIGNMENTS = {"=", "\\u003d", "%3D"};
+    private static final String[] URL_PARAM_SUFFIXES = {"&", "\\u0026", "&amp;", "#", "\\u0023", "%26", "%23"};
     private static final Set<String> EXCLUDED_HOSTS = Set.of(
             "www.google.com",
             "www.googletagmanager.com",
@@ -140,18 +144,20 @@ public class HarAnalysisService {
             if (match == null || match.requestRef() == null) {
                 continue;
             }
-            RequestRef ref = match.requestRef();
-            String value = variables.get(variableName);
-            sourceIndicesUsed.add(ref.index());
-            sourceVariableNameByIndex.putIfAbsent(ref.index(), variableName);
-            sourceVariableValueByIndex.putIfAbsent(ref.index(), value);
-            sourceExtractionTypeByIndex.putIfAbsent(ref.index(), match.extractionType());
-            sourceHeaderNameByIndex.putIfAbsent(ref.index(), match.headerName());
-            sourceHeaderValueByIndex.putIfAbsent(ref.index(), match.headerValue());
-            sourceResponseBodyByIndex.putIfAbsent(ref.index(), match.responseBody());
-            sourceVariablesByIndex
-                    .computeIfAbsent(ref.index(), k -> new LinkedHashMap<>())
-                    .putIfAbsent(variableName, value);
+            registerSourceVariable(
+                    match.requestRef(),
+                    variableName,
+                    variables.get(variableName),
+                    match,
+                    sourceIndicesUsed,
+                    sourceVariableNameByIndex,
+                    sourceVariableValueByIndex,
+                    sourceExtractionTypeByIndex,
+                    sourceHeaderNameByIndex,
+                    sourceHeaderValueByIndex,
+                    sourceResponseBodyByIndex,
+                    sourceVariablesByIndex
+            );
         }
 
         int count = Math.min(originalEntries.size(), modifiedEntries.size());
@@ -197,16 +203,20 @@ public class HarAnalysisService {
 
                 RequestRef ref = match.requestRef();
                 if (ref != null) {
-                    sourceIndicesUsed.add(ref.index());
-                    sourceVariableNameByIndex.putIfAbsent(ref.index(), variableName);
-                    sourceVariableValueByIndex.putIfAbsent(ref.index(), value);
-                    sourceExtractionTypeByIndex.putIfAbsent(ref.index(), match.extractionType());
-                    sourceHeaderNameByIndex.putIfAbsent(ref.index(), match.headerName());
-                    sourceHeaderValueByIndex.putIfAbsent(ref.index(), match.headerValue());
-                    sourceResponseBodyByIndex.putIfAbsent(ref.index(), match.responseBody());
-                    sourceVariablesByIndex
-                            .computeIfAbsent(ref.index(), k -> new LinkedHashMap<>())
-                            .putIfAbsent(variableName, value);
+                    registerSourceVariable(
+                            ref,
+                            variableName,
+                            value,
+                            match,
+                            sourceIndicesUsed,
+                            sourceVariableNameByIndex,
+                            sourceVariableValueByIndex,
+                            sourceExtractionTypeByIndex,
+                            sourceHeaderNameByIndex,
+                            sourceHeaderValueByIndex,
+                            sourceResponseBodyByIndex,
+                            sourceVariablesByIndex
+                    );
                 }
 
                 if (sourceVariableName == null) {
@@ -328,6 +338,33 @@ public class HarAnalysisService {
         }
 
         return requests;
+    }
+
+    private void registerSourceVariable(
+            RequestRef ref,
+            String variableName,
+            String value,
+            SourceMatch match,
+            Set<Integer> sourceIndicesUsed,
+            Map<Integer, String> sourceVariableNameByIndex,
+            Map<Integer, String> sourceVariableValueByIndex,
+            Map<Integer, String> sourceExtractionTypeByIndex,
+            Map<Integer, String> sourceHeaderNameByIndex,
+            Map<Integer, String> sourceHeaderValueByIndex,
+            Map<Integer, String> sourceResponseBodyByIndex,
+            Map<Integer, Map<String, String>> sourceVariablesByIndex
+    ) {
+        int sourceIndex = ref.index();
+        sourceIndicesUsed.add(sourceIndex);
+        sourceVariableNameByIndex.putIfAbsent(sourceIndex, variableName);
+        sourceVariableValueByIndex.putIfAbsent(sourceIndex, value);
+        sourceExtractionTypeByIndex.putIfAbsent(sourceIndex, match.extractionType());
+        sourceHeaderNameByIndex.putIfAbsent(sourceIndex, match.headerName());
+        sourceHeaderValueByIndex.putIfAbsent(sourceIndex, match.headerValue());
+        sourceResponseBodyByIndex.putIfAbsent(sourceIndex, match.responseBody());
+        sourceVariablesByIndex
+                .computeIfAbsent(sourceIndex, k -> new LinkedHashMap<>())
+                .putIfAbsent(variableName, value);
     }
 
     private Map<String, String> extractHeaders(JsonNode headersNode) {
@@ -1228,12 +1265,8 @@ public class HarAnalysisService {
             return null;
         }
 
-        String[] separators = {"?", "&", "\\u0026", "&amp;", "%3F", "%26"};
-        String[] assignments = {"=", "\\u003d", "%3D"};
-        String[] suffixes = {"&", "\\u0026", "&amp;", "#", "\\u0023", "%26", "%23"};
-
-        for (String separator : separators) {
-            for (String assignment : assignments) {
+        for (String separator : URL_PARAM_SEPARATORS) {
+            for (String assignment : URL_PARAM_ASSIGNMENTS) {
                 String needle = separator + normalizedParameterName + assignment + value;
                 int start = text.indexOf(needle);
                 if (start < 0) {
@@ -1242,14 +1275,14 @@ public class HarAnalysisService {
                 String prefix = buildUrlPrefix(text, start, separator, normalizedParameterName, assignment);
                 int valueStart = start + separator.length() + normalizedParameterName.length() + assignment.length();
                 int afterIdx = valueStart + value.length();
-                String regex = appendUrlSuffix(text, prefix, afterIdx, suffixes);
+                String regex = appendUrlSuffix(text, prefix, afterIdx, URL_PARAM_SUFFIXES);
                 if (regex != null) {
                     return regex;
                 }
             }
         }
 
-        for (String assignment : assignments) {
+        for (String assignment : URL_PARAM_ASSIGNMENTS) {
             String needle = normalizedParameterName + assignment + value;
             int start = text.indexOf(needle);
             if (start < 0) {
@@ -1257,7 +1290,7 @@ public class HarAnalysisService {
             }
             String prefix = normalizedParameterName + assignment;
             int afterIdx = start + normalizedParameterName.length() + assignment.length() + value.length();
-            String regex = appendUrlSuffix(text, prefix, afterIdx, suffixes);
+            String regex = appendUrlSuffix(text, prefix, afterIdx, URL_PARAM_SUFFIXES);
             if (regex != null) {
                 return regex;
             }
@@ -1337,8 +1370,7 @@ public class HarAnalysisService {
             return null;
         }
 
-        Pattern keyPrefix = Pattern.compile("\"([^\"]{1,80})\"\\s*:\\s*\"");
-        Matcher m = keyPrefix.matcher(text);
+        Matcher m = JSON_STRING_FIELD_PREFIX.matcher(text);
         while (m.find()) {
             int valueStart = m.end();
             if (valueStart == idx) {
