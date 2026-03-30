@@ -1,11 +1,11 @@
 package com.ngenia.harparam.service;
 
-import com.ngenia.harparam.model.AnalysisResult;
-import com.ngenia.harparam.model.RewrittenRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.ngenia.harparam.model.AnalysisResult;
+import com.ngenia.harparam.model.RewrittenRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -13,17 +13,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -933,16 +923,6 @@ public class HarAnalysisService {
 
     private SourceMatch findFirstSourceMatch(String parameterName, String value, List<ResponseSnapshot> previousResponses) {
         for (ResponseSnapshot snapshot : previousResponses) {
-            String requestUrl = snapshot.requestRef().url();
-            if (containsNamedOccurrence(requestUrl, parameterName, value)) {
-                return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, requestUrl, parameterName);
-            }
-
-            String requestBody = snapshot.requestRef().body();
-            if (containsNamedOccurrence(requestBody, parameterName, value)) {
-                return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, requestBody, parameterName);
-            }
-
             String body = snapshot.bodyText();
             if (containsNamedOccurrence(body, parameterName, value)) {
                 return new SourceMatch(snapshot.requestRef(), "BODY", null, null, body, parameterName);
@@ -956,28 +936,6 @@ public class HarAnalysisService {
             }
             if (body != null && body.contains(value)) {
                 return new SourceMatch(snapshot.requestRef(), "BODY", null, null, body, parameterName);
-            }
-
-            // Fallback: some correlated values are propagated from prior request URL/body,
-            // not only from response payload/headers.
-            if (requestBody != null && requestBody.contains(value)) {
-                return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, requestBody, parameterName);
-            }
-            if (requestUrl != null) {
-                String directNeedle = Objects.toString(parameterName, "") + "=" + value;
-                String decodedUrl = decode(requestUrl);
-                if (!Objects.toString(parameterName, "").isBlank() && requestUrl.contains(directNeedle)) {
-                    return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, requestUrl, parameterName);
-                }
-                if (!Objects.toString(parameterName, "").isBlank() && !decodedUrl.equals(requestUrl) && decodedUrl.contains(directNeedle)) {
-                    return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, decodedUrl, parameterName);
-                }
-                if (requestUrl.contains(value)) {
-                    return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, requestUrl, parameterName);
-                }
-                if (!decodedUrl.equals(requestUrl) && decodedUrl.contains(value)) {
-                    return new SourceMatch(snapshot.requestRef(), "REQUEST", null, null, decodedUrl, parameterName);
-                }
             }
         }
         return null;

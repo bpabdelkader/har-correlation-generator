@@ -3,6 +3,7 @@ package com.ngenia.harparam.service;
 import com.ngenia.harparam.model.RewrittenRequest;
 import org.springframework.stereotype.Service;
 
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,7 +14,7 @@ import java.util.Objects;
 @Service
 public class HarToJmxService {
 
-    public String toJmx(List<RewrittenRequest> requests, Map<String, String> variables) {
+    public String toJmx(List<RewrittenRequest> requests, Map<String, String> variables, Map<String, String> regexByVariable) {
         StringBuilder jmx = new StringBuilder(32_768);
         jmx.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
         jmx.append("<jmeterTestPlan version=\"1.2\" properties=\"5.0\" jmeter=\"5.6.3\">\n");
@@ -31,21 +32,7 @@ public class HarToJmxService {
         jmx.append("      <stringProp name=\"TestPlan.user_define_classpath\"></stringProp>\n");
         jmx.append("    </TestPlan>\n");
         jmx.append("    <hashTree>\n");
-        jmx.append("      <ThreadGroup guiclass=\"ThreadGroupGui\" testclass=\"ThreadGroup\" testname=\"Thread Group\" enabled=\"true\">\n");
-        jmx.append("        <stringProp name=\"ThreadGroup.on_sample_error\">continue</stringProp>\n");
-        jmx.append("        <elementProp name=\"ThreadGroup.main_controller\" elementType=\"LoopController\" guiclass=\"LoopControlPanel\" testclass=\"LoopController\" testname=\"Loop Controller\" enabled=\"true\">\n");
-        jmx.append("          <boolProp name=\"LoopController.continue_forever\">false</boolProp>\n");
-        jmx.append("          <stringProp name=\"LoopController.loops\">1</stringProp>\n");
-        jmx.append("        </elementProp>\n");
-        jmx.append("        <stringProp name=\"ThreadGroup.num_threads\">1</stringProp>\n");
-        jmx.append("        <stringProp name=\"ThreadGroup.ramp_time\">1</stringProp>\n");
-        jmx.append("        <boolProp name=\"ThreadGroup.scheduler\">false</boolProp>\n");
-        jmx.append("        <stringProp name=\"ThreadGroup.duration\"></stringProp>\n");
-        jmx.append("        <stringProp name=\"ThreadGroup.delay\"></stringProp>\n");
-        jmx.append("      </ThreadGroup>\n");
-        jmx.append("      <hashTree>\n");
-        appendSamplers(jmx, requests == null ? List.of() : requests);
-        jmx.append("      </hashTree>\n");
+        appendThreadGroups(jmx, requests == null ? List.of() : requests, regexByVariable == null ? Map.of() : regexByVariable);
         jmx.append("    </hashTree>\n");
         jmx.append("  </hashTree>\n");
         jmx.append("</jmeterTestPlan>\n");
@@ -71,7 +58,7 @@ public class HarToJmxService {
         }
     }
 
-    private void appendSamplers(StringBuilder jmx, List<RewrittenRequest> requests) {
+    private void appendSamplers(StringBuilder jmx, List<RewrittenRequest> requests, Map<String, String> regexByVariable) {
         for (RewrittenRequest req : requests) {
             UrlParts url = parseUrl(req.rewrittenUrl());
             Map<String, String> headers = filteredHeaders(req.rewrittenHeaders());
@@ -119,8 +106,104 @@ public class HarToJmxService {
             jmx.append("          <boolProp name=\"HTTPSampler.postBodyRaw\">").append(rawBody).append("</boolProp>\n");
             jmx.append("        </HTTPSamplerProxy>\n");
             jmx.append("        <hashTree>\n");
+            appendRegexExtractors(jmx, req.sourceVariables(), regexByVariable);
             appendHeaderManager(jmx, headers);
             jmx.append("        </hashTree>\n");
+        }
+    }
+
+    private void appendThreadGroups(StringBuilder jmx, List<RewrittenRequest> requests, Map<String, String> regexByVariable) {
+        List<List<RewrittenRequest>> containers = groupRequestsByContainer(requests);
+        for (int i = 0; i < containers.size(); i++) {
+            List<RewrittenRequest> container = containers.get(i);
+            if (container.isEmpty()) {
+                continue;
+            }
+            appendThreadGroup(jmx, container, i + 1, regexByVariable);
+        }
+    }
+
+    private List<List<RewrittenRequest>> groupRequestsByContainer(List<RewrittenRequest> requests) {
+        if (requests == null || requests.isEmpty()) {
+            return List.of();
+        }
+
+        List<List<RewrittenRequest>> groups = new ArrayList<>();
+        List<RewrittenRequest> current = new ArrayList<>();
+        long previousTs = Long.MIN_VALUE;
+
+        for (RewrittenRequest request : requests) {
+            long ts = parseTimestamp(request.startedDateTime());
+            boolean startNew = current.isEmpty();
+            if (!startNew) {
+                if (ts == Long.MIN_VALUE || previousTs == Long.MIN_VALUE) {
+                    startNew = true;
+                } else {
+                    startNew = (ts - previousTs) >= 1_000L;
+                }
+            }
+
+            if (startNew) {
+                if (!current.isEmpty()) {
+                    groups.add(current);
+                }
+                current = new ArrayList<>();
+            }
+
+            current.add(request);
+            previousTs = ts;
+        }
+
+        if (!current.isEmpty()) {
+            groups.add(current);
+        }
+        return groups;
+    }
+
+    private void appendThreadGroup(StringBuilder jmx, List<RewrittenRequest> requests, int groupIndex, Map<String, String> regexByVariable) {
+        String threadGroupName = transactionTitleFor(requests.get(0), groupIndex);
+        jmx.append("      <ThreadGroup guiclass=\"ThreadGroupGui\" testclass=\"ThreadGroup\" testname=\"")
+                .append(xml(threadGroupName))
+                .append("\" enabled=\"true\">\n");
+        jmx.append("        <stringProp name=\"ThreadGroup.on_sample_error\">continue</stringProp>\n");
+        jmx.append("        <elementProp name=\"ThreadGroup.main_controller\" elementType=\"LoopController\" guiclass=\"LoopControlPanel\" testclass=\"LoopController\" testname=\"Loop Controller\" enabled=\"true\">\n");
+        jmx.append("          <boolProp name=\"LoopController.continue_forever\">false</boolProp>\n");
+        jmx.append("          <stringProp name=\"LoopController.loops\">1</stringProp>\n");
+        jmx.append("        </elementProp>\n");
+        jmx.append("        <stringProp name=\"ThreadGroup.num_threads\">1</stringProp>\n");
+        jmx.append("        <stringProp name=\"ThreadGroup.ramp_time\">1</stringProp>\n");
+        jmx.append("        <boolProp name=\"ThreadGroup.scheduler\">false</boolProp>\n");
+        jmx.append("        <stringProp name=\"ThreadGroup.duration\"></stringProp>\n");
+        jmx.append("        <stringProp name=\"ThreadGroup.delay\"></stringProp>\n");
+        jmx.append("      </ThreadGroup>\n");
+        jmx.append("      <hashTree>\n");
+        appendSamplers(jmx, requests, regexByVariable);
+        jmx.append("      </hashTree>\n");
+    }
+
+    private void appendRegexExtractors(StringBuilder jmx, Map<String, String> sourceVariables, Map<String, String> regexByVariable) {
+        if (sourceVariables == null || sourceVariables.isEmpty() || regexByVariable == null || regexByVariable.isEmpty()) {
+            return;
+        }
+
+        for (String variableName : sourceVariables.keySet()) {
+            String name = Objects.toString(variableName, "");
+            String regex = regexByVariable.get(name);
+            if (name.isBlank() || regex == null || regex.isBlank()) {
+                continue;
+            }
+            jmx.append("          <RegexExtractor guiclass=\"RegexExtractorGui\" testclass=\"RegexExtractor\" testname=\"")
+                    .append(xml(name))
+                    .append("\">\n");
+            jmx.append("            <stringProp name=\"RegexExtractor.useHeaders\">false</stringProp>\n");
+            jmx.append("            <stringProp name=\"RegexExtractor.refname\">").append(xml(name)).append("</stringProp>\n");
+            jmx.append("            <stringProp name=\"RegexExtractor.regex\">").append(xml(regex)).append("</stringProp>\n");
+            jmx.append("            <stringProp name=\"RegexExtractor.template\">$1$</stringProp>\n");
+            jmx.append("            <stringProp name=\"RegexExtractor.default\">NotFound</stringProp>\n");
+            jmx.append("            <stringProp name=\"RegexExtractor.match_number\">1</stringProp>\n");
+            jmx.append("            <boolProp name=\"RegexExtractor.default_empty_value\">false</boolProp>\n");
+            jmx.append("          </RegexExtractor>\n");
+            jmx.append("          <hashTree/>\n");
         }
     }
 
@@ -290,6 +373,43 @@ public class HarToJmxService {
     private String safeName(String name) {
         String text = Objects.toString(name, "").trim();
         return text.isBlank() ? "/" : text;
+    }
+
+    private long parseTimestamp(String raw) {
+        String text = Objects.toString(raw, "").trim();
+        if (text.isBlank()) {
+            return Long.MIN_VALUE;
+        }
+        try {
+            return OffsetDateTime.parse(text).toInstant().toEpochMilli();
+        } catch (Exception e) {
+            return Long.MIN_VALUE;
+        }
+    }
+
+    private String transactionTitleFor(RewrittenRequest request, int fallbackIndex) {
+        return "SC01_" + pad2(fallbackIndex) + "-" + normalizeTransactionLabel(request == null ? "" : request.name());
+    }
+
+    private String pad2(int value) {
+        return value < 10 ? "0" + value : Integer.toString(value);
+    }
+
+    private String normalizeTransactionLabel(String raw) {
+        String text = Objects.toString(raw, "").trim();
+        if (text.isBlank() || "/".equals(text)) {
+            return "Home";
+        }
+
+        text = text.replaceAll("[_\\s]+", "-");
+        text = text.replaceAll("[^A-Za-z0-9-]+", "-");
+        text = text.replaceAll("-+", "-");
+        text = text.replaceAll("^-|-$", "");
+        if (text.isBlank()) {
+            return "Home";
+        }
+
+        return Character.toUpperCase(text.charAt(0)) + text.substring(1);
     }
 
     private String xml(String text) {

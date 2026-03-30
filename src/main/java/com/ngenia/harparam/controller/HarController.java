@@ -107,12 +107,19 @@ public class HarController {
             throw new ResponseStatusException(NOT_FOUND, "No analysis result available.");
         }
 
-        String jmx = harToJmxService.toJmx(result.rewrittenRequests(), result.variables());
+        String jmx = harToJmxService.toJmx(result.rewrittenRequests(), result.variables(), result.regexByVariable());
         byte[] bytes = jmx.getBytes(StandardCharsets.UTF_8);
+
+        String originalName = null;
+        Object originalStored = session.getAttribute(SESSION_ORIGINAL_HAR_FILENAME);
+        if (originalStored instanceof String name && !name.isBlank()) {
+            originalName = name;
+        }
+        String filename = buildSiblingFilename(originalName, ".jmx", "modified.jmx");
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_XML);
-        headers.setContentDisposition(ContentDisposition.attachment().filename("modified.jmx").build());
+        headers.setContentDisposition(ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build());
         return ResponseEntity.ok().headers(headers).body(bytes);
     }
 
@@ -182,5 +189,19 @@ public class HarController {
         }
 
         return name + "_modified";
+    }
+
+    private String buildSiblingFilename(String original, String newExtension, String fallback) {
+        String name = safeFilename(original);
+        if (name.isBlank()) {
+            return fallback;
+        }
+
+        int dot = name.lastIndexOf('.');
+        if (dot > 0) {
+            return name.substring(0, dot) + newExtension;
+        }
+
+        return name + newExtension;
     }
 }

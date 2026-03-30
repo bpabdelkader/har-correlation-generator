@@ -22,14 +22,14 @@ Perfect for anyone who scripts load tests with **JMeter**, **Gatling**, **k6** o
 ---
 
 ## ✨ Key Features
-
-- ✅ **Drag & drop HAR upload**
-- ✅ **Smart correlation engine** (regex + JSONPath + header/body extraction)
-- ✅ **Visual correlation table** – see exactly where each variable is extracted and reused
-- ✅ **One-click export** of correlation rules (JSON / JMeter .jmx snippet / Gatling Scala)
-- ✅ **Side-by-side request viewer** – click any variable to highlight it in the original traffic
-- ✅ **Filtering & search** by variable name, domain, or request type
-- ✅ **Export final dynamic HAR file with dynamic variablss**
+- ✅ **Drag-and-drop HAR file upload**
+- ✅ **Intelligent correlation engine (regex, JSONPath, header/body extraction)**
+- ✅ **Interactive correlation table showing variable extraction and reuse points**
+- ✅ **One-click export of correlation rules (JSON / JMeter `.jmx` snippet / Gatling Scala)**
+- ✅ **Side-by-side request viewer with variable highlighting in source traffic**
+- ✅ **Advanced filtering and search (by variable name, domain, or request type)**
+- ✅ **Export of fully parameterized HAR file with dynamic variables**
+- ✅ **Conversion of the scenario into a ready-to-import JMeter `.jmx` file**
 
 ---
 
@@ -57,6 +57,9 @@ image:https://i.postimg.cc/9fSm3Gpt/12.gif[]
 
 .Correlation Rules Export
 image:https://i.postimg.cc/442rWJWv/13.gif[]
+
+.Conversion of the scenario into a ready-to-import JMeter `.jmx`
+image:https://i.postimg.cc/286wz9Pz/15.gif[]
 
 .Final Correlated HAR Export
 image:https://i.postimg.cc/ncchDcCX/14.gif[]
