@@ -9,6 +9,9 @@ import java.io.InputStream;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * @author bpabdelkader
+ */
 class HarToJmxServiceTest {
 
     private static final String TEST_HAR_RESOURCE = "TestHAR-min.har";

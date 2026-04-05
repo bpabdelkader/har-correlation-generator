@@ -3,6 +3,9 @@ package com.ngenia.harparam;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+/**
+ * @author bpabdelkader
+ */
 @SpringBootApplication
 public class HarParamApplication {
 

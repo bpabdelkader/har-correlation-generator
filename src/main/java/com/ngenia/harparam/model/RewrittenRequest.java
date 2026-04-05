@@ -2,6 +2,9 @@ package com.ngenia.harparam.model;
 
 import java.util.Map;
 
+/**
+ * @author bpabdelkader
+ */
 public record RewrittenRequest(
         int index,
         String kind,

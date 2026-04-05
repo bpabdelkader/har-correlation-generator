@@ -1,4 +1,4 @@
-# 🎯 HAR Variable Correlator
+# 🎯 HAR Variable Correlator image:https://sonarcloud.io/api/project_badges/measure?project=bpabdelkader_har-correlation-generator&metric=alert_status[]
 
 **Instant Correlation Engine for Automatic detection of tokens, sessions, CSRF, UUIDs & more
 **
@@ -74,3 +74,5 @@ cd har-variable-correlator
 mvn clean spring-boot:run
 
 Then open your browser at http://localhost:8080
+```
+👉 You can access the live application here: link:https://har-correlation-generator.onrender.com/[har-correlation-generator]

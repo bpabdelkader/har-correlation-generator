@@ -1,0 +1,6 @@
+.git
+.idea
+target
+*.log
+README*
+readme.adoc

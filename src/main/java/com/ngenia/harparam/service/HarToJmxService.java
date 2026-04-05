@@ -10,32 +10,42 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
+/**
+ * @author bpabdelkader
+ */
 @Service
 public class HarToJmxService {
 
+    private static final Pattern DIGITS = Pattern.compile("\\d+");
+    private static final Pattern LABEL_SPACES = Pattern.compile("[_\\s]+");
+    private static final Pattern LABEL_NON_ALNUM = Pattern.compile("[^A-Za-z0-9-]+");
+    private static final Pattern LABEL_DASH_RUNS = Pattern.compile("-+");
+    private static final Pattern LABEL_EDGE_DASHES = Pattern.compile("^-|-$");
+
     public String toJmx(List<RewrittenRequest> requests, Map<String, String> variables, Map<String, String> regexByVariable) {
         StringBuilder jmx = new StringBuilder(32_768);
-        jmx.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-        jmx.append("<jmeterTestPlan version=\"1.2\" properties=\"5.0\" jmeter=\"5.6.3\">\n");
-        jmx.append("  <hashTree>\n");
-        jmx.append("    <TestPlan guiclass=\"TestPlanGui\" testclass=\"TestPlan\" testname=\"HAR Converted Plan\" enabled=\"true\">\n");
-        jmx.append("      <stringProp name=\"TestPlan.comments\"></stringProp>\n");
-        jmx.append("      <boolProp name=\"TestPlan.functional_mode\">false</boolProp>\n");
-        jmx.append("      <boolProp name=\"TestPlan.tearDown_on_shutdown\">true</boolProp>\n");
-        jmx.append("      <boolProp name=\"TestPlan.serialize_threadgroups\">false</boolProp>\n");
-        jmx.append("      <elementProp name=\"TestPlan.user_defined_variables\" elementType=\"Arguments\" guiclass=\"ArgumentsPanel\" testclass=\"Arguments\" testname=\"User Variables\" enabled=\"true\">\n");
-        jmx.append("        <collectionProp name=\"Arguments.arguments\">\n");
+        line(jmx, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+        line(jmx, "<jmeterTestPlan version=\"1.2\" properties=\"5.0\" jmeter=\"5.6.3\">");
+        line(jmx, "  <hashTree>");
+        line(jmx, "    <TestPlan guiclass=\"TestPlanGui\" testclass=\"TestPlan\" testname=\"HAR Converted Plan\" enabled=\"true\">");
+        line(jmx, "      <stringProp name=\"TestPlan.comments\"></stringProp>");
+        line(jmx, "      <boolProp name=\"TestPlan.functional_mode\">false</boolProp>");
+        line(jmx, "      <boolProp name=\"TestPlan.tearDown_on_shutdown\">true</boolProp>");
+        line(jmx, "      <boolProp name=\"TestPlan.serialize_threadgroups\">false</boolProp>");
+        line(jmx, "      <elementProp name=\"TestPlan.user_defined_variables\" elementType=\"Arguments\" guiclass=\"ArgumentsPanel\" testclass=\"Arguments\" testname=\"User Variables\" enabled=\"true\">");
+        line(jmx, "        <collectionProp name=\"Arguments.arguments\">");
         appendUserVariables(jmx, variables);
-        jmx.append("        </collectionProp>\n");
-        jmx.append("      </elementProp>\n");
-        jmx.append("      <stringProp name=\"TestPlan.user_define_classpath\"></stringProp>\n");
-        jmx.append("    </TestPlan>\n");
-        jmx.append("    <hashTree>\n");
+        line(jmx, "        </collectionProp>");
+        line(jmx, "      </elementProp>");
+        line(jmx, "      <stringProp name=\"TestPlan.user_define_classpath\"></stringProp>");
+        line(jmx, "    </TestPlan>");
+        line(jmx, "    <hashTree>");
         appendThreadGroups(jmx, requests == null ? List.of() : requests, regexByVariable == null ? Map.of() : regexByVariable);
-        jmx.append("    </hashTree>\n");
-        jmx.append("  </hashTree>\n");
-        jmx.append("</jmeterTestPlan>\n");
+        line(jmx, "    </hashTree>");
+        line(jmx, "  </hashTree>");
+        line(jmx, "</jmeterTestPlan>");
         return jmx.toString();
     }
 
@@ -48,13 +58,11 @@ public class HarToJmxService {
             if (name.isBlank()) {
                 continue;
             }
-            jmx.append("          <elementProp name=\"")
-                    .append(xml(name))
-                    .append("\" elementType=\"Argument\">\n");
-            jmx.append("            <stringProp name=\"Argument.name\">").append(xml(name)).append("</stringProp>\n");
-            jmx.append("            <stringProp name=\"Argument.value\">").append(xml(entry.getValue())).append("</stringProp>\n");
-            jmx.append("            <stringProp name=\"Argument.metadata\">=</stringProp>\n");
-            jmx.append("          </elementProp>\n");
+            line(jmx, "          <elementProp name=\"%s\" elementType=\"Argument\">", xml(name));
+            line(jmx, "            <stringProp name=\"Argument.name\">%s</stringProp>", xml(name));
+            line(jmx, "            <stringProp name=\"Argument.value\">%s</stringProp>", xml(entry.getValue()));
+            line(jmx, "            <stringProp name=\"Argument.metadata\">=</stringProp>");
+            line(jmx, "          </elementProp>");
         }
     }
 
@@ -73,11 +81,9 @@ public class HarToJmxService {
 
             String testName = "R" + req.index() + " " + method + " " + safeName(req.name());
 
-            jmx.append("        <HTTPSamplerProxy guiclass=\"HttpTestSampleGui\" testclass=\"HTTPSamplerProxy\" testname=\"")
-                    .append(xml(testName))
-                    .append("\" enabled=\"true\">\n");
-            jmx.append("          <elementProp name=\"HTTPsampler.Arguments\" elementType=\"Arguments\">\n");
-            jmx.append("            <collectionProp name=\"Arguments.arguments\">\n");
+            line(jmx, "        <HTTPSamplerProxy guiclass=\"HttpTestSampleGui\" testclass=\"HTTPSamplerProxy\" testname=\"%s\" enabled=\"true\">", xml(testName));
+            line(jmx, "          <elementProp name=\"HTTPsampler.Arguments\" elementType=\"Arguments\">");
+            line(jmx, "            <collectionProp name=\"Arguments.arguments\">");
 
             if (rawBody) {
                 appendRawBodyArgument(jmx, body);
@@ -90,25 +96,25 @@ public class HarToJmxService {
                 }
             }
 
-            jmx.append("            </collectionProp>\n");
-            jmx.append("          </elementProp>\n");
-            jmx.append("          <stringProp name=\"HTTPSampler.domain\">").append(xml(url.domain())).append("</stringProp>\n");
-            jmx.append("          <stringProp name=\"HTTPSampler.port\">").append(xml(url.port())).append("</stringProp>\n");
-            jmx.append("          <stringProp name=\"HTTPSampler.protocol\">").append(xml(url.protocol())).append("</stringProp>\n");
-            jmx.append("          <stringProp name=\"HTTPSampler.contentEncoding\"></stringProp>\n");
-            jmx.append("          <stringProp name=\"HTTPSampler.path\">").append(xml(rawBody ? url.pathWithQuery() : url.path())).append("</stringProp>\n");
-            jmx.append("          <stringProp name=\"HTTPSampler.method\">").append(xml(method)).append("</stringProp>\n");
-            jmx.append("          <boolProp name=\"HTTPSampler.follow_redirects\">true</boolProp>\n");
-            jmx.append("          <boolProp name=\"HTTPSampler.auto_redirects\">false</boolProp>\n");
-            jmx.append("          <boolProp name=\"HTTPSampler.use_keepalive\">true</boolProp>\n");
-            jmx.append("          <boolProp name=\"HTTPSampler.DO_MULTIPART_POST\">false</boolProp>\n");
-            jmx.append("          <stringProp name=\"HTTPSampler.embedded_url_re\"></stringProp>\n");
-            jmx.append("          <boolProp name=\"HTTPSampler.postBodyRaw\">").append(rawBody).append("</boolProp>\n");
-            jmx.append("        </HTTPSamplerProxy>\n");
-            jmx.append("        <hashTree>\n");
+            line(jmx, "            </collectionProp>");
+            line(jmx, "          </elementProp>");
+            line(jmx, "          <stringProp name=\"HTTPSampler.domain\">%s</stringProp>", xml(url.domain()));
+            line(jmx, "          <stringProp name=\"HTTPSampler.port\">%s</stringProp>", xml(url.port()));
+            line(jmx, "          <stringProp name=\"HTTPSampler.protocol\">%s</stringProp>", xml(url.protocol()));
+            line(jmx, "          <stringProp name=\"HTTPSampler.contentEncoding\"></stringProp>");
+            line(jmx, "          <stringProp name=\"HTTPSampler.path\">%s</stringProp>", xml(rawBody ? url.pathWithQuery() : url.path()));
+            line(jmx, "          <stringProp name=\"HTTPSampler.method\">%s</stringProp>", xml(method));
+            line(jmx, "          <boolProp name=\"HTTPSampler.follow_redirects\">true</boolProp>");
+            line(jmx, "          <boolProp name=\"HTTPSampler.auto_redirects\">false</boolProp>");
+            line(jmx, "          <boolProp name=\"HTTPSampler.use_keepalive\">true</boolProp>");
+            line(jmx, "          <boolProp name=\"HTTPSampler.DO_MULTIPART_POST\">false</boolProp>");
+            line(jmx, "          <stringProp name=\"HTTPSampler.embedded_url_re\"></stringProp>");
+            line(jmx, "          <boolProp name=\"HTTPSampler.postBodyRaw\">%s</boolProp>", rawBody);
+            line(jmx, "        </HTTPSamplerProxy>");
+            line(jmx, "        <hashTree>");
             appendRegexExtractors(jmx, req.sourceVariables(), regexByVariable);
             appendHeaderManager(jmx, headers);
-            jmx.append("        </hashTree>\n");
+            line(jmx, "        </hashTree>");
         }
     }
 
@@ -162,23 +168,21 @@ public class HarToJmxService {
 
     private void appendThreadGroup(StringBuilder jmx, List<RewrittenRequest> requests, int groupIndex, Map<String, String> regexByVariable) {
         String threadGroupName = transactionTitleFor(requests.get(0), groupIndex);
-        jmx.append("      <ThreadGroup guiclass=\"ThreadGroupGui\" testclass=\"ThreadGroup\" testname=\"")
-                .append(xml(threadGroupName))
-                .append("\" enabled=\"true\">\n");
-        jmx.append("        <stringProp name=\"ThreadGroup.on_sample_error\">continue</stringProp>\n");
-        jmx.append("        <elementProp name=\"ThreadGroup.main_controller\" elementType=\"LoopController\" guiclass=\"LoopControlPanel\" testclass=\"LoopController\" testname=\"Loop Controller\" enabled=\"true\">\n");
-        jmx.append("          <boolProp name=\"LoopController.continue_forever\">false</boolProp>\n");
-        jmx.append("          <stringProp name=\"LoopController.loops\">1</stringProp>\n");
-        jmx.append("        </elementProp>\n");
-        jmx.append("        <stringProp name=\"ThreadGroup.num_threads\">1</stringProp>\n");
-        jmx.append("        <stringProp name=\"ThreadGroup.ramp_time\">1</stringProp>\n");
-        jmx.append("        <boolProp name=\"ThreadGroup.scheduler\">false</boolProp>\n");
-        jmx.append("        <stringProp name=\"ThreadGroup.duration\"></stringProp>\n");
-        jmx.append("        <stringProp name=\"ThreadGroup.delay\"></stringProp>\n");
-        jmx.append("      </ThreadGroup>\n");
-        jmx.append("      <hashTree>\n");
+        line(jmx, "      <ThreadGroup guiclass=\"ThreadGroupGui\" testclass=\"ThreadGroup\" testname=\"%s\" enabled=\"true\">", xml(threadGroupName));
+        line(jmx, "        <stringProp name=\"ThreadGroup.on_sample_error\">continue</stringProp>");
+        line(jmx, "        <elementProp name=\"ThreadGroup.main_controller\" elementType=\"LoopController\" guiclass=\"LoopControlPanel\" testclass=\"LoopController\" testname=\"Loop Controller\" enabled=\"true\">");
+        line(jmx, "          <boolProp name=\"LoopController.continue_forever\">false</boolProp>");
+        line(jmx, "          <stringProp name=\"LoopController.loops\">1</stringProp>");
+        line(jmx, "        </elementProp>");
+        line(jmx, "        <stringProp name=\"ThreadGroup.num_threads\">1</stringProp>");
+        line(jmx, "        <stringProp name=\"ThreadGroup.ramp_time\">1</stringProp>");
+        line(jmx, "        <boolProp name=\"ThreadGroup.scheduler\">false</boolProp>");
+        line(jmx, "        <stringProp name=\"ThreadGroup.duration\"></stringProp>");
+        line(jmx, "        <stringProp name=\"ThreadGroup.delay\"></stringProp>");
+        line(jmx, "      </ThreadGroup>");
+        line(jmx, "      <hashTree>");
         appendSamplers(jmx, requests, regexByVariable);
-        jmx.append("      </hashTree>\n");
+        line(jmx, "      </hashTree>");
     }
 
     private void appendRegexExtractors(StringBuilder jmx, Map<String, String> sourceVariables, Map<String, String> regexByVariable) {
@@ -192,61 +196,45 @@ public class HarToJmxService {
             if (name.isBlank() || regex == null || regex.isBlank()) {
                 continue;
             }
-            jmx.append("          <RegexExtractor guiclass=\"RegexExtractorGui\" testclass=\"RegexExtractor\" testname=\"")
-                    .append(xml(name))
-                    .append("\">\n");
-            jmx.append("            <stringProp name=\"RegexExtractor.useHeaders\">false</stringProp>\n");
-            jmx.append("            <stringProp name=\"RegexExtractor.refname\">").append(xml(name)).append("</stringProp>\n");
-            jmx.append("            <stringProp name=\"RegexExtractor.regex\">").append(xml(regex)).append("</stringProp>\n");
-            jmx.append("            <stringProp name=\"RegexExtractor.template\">$1$</stringProp>\n");
-            jmx.append("            <stringProp name=\"RegexExtractor.default\">NotFound</stringProp>\n");
-            jmx.append("            <stringProp name=\"RegexExtractor.match_number\">1</stringProp>\n");
-            jmx.append("            <boolProp name=\"RegexExtractor.default_empty_value\">false</boolProp>\n");
-            jmx.append("          </RegexExtractor>\n");
-            jmx.append("          <hashTree/>\n");
+            line(jmx, "          <RegexExtractor guiclass=\"RegexExtractorGui\" testclass=\"RegexExtractor\" testname=\"%s\">", xml(name));
+            line(jmx, "            <stringProp name=\"RegexExtractor.useHeaders\">false</stringProp>");
+            line(jmx, "            <stringProp name=\"RegexExtractor.refname\">%s</stringProp>", xml(name));
+            line(jmx, "            <stringProp name=\"RegexExtractor.regex\">%s</stringProp>", xml(regex));
+            line(jmx, "            <stringProp name=\"RegexExtractor.template\">$1$</stringProp>");
+            line(jmx, "            <stringProp name=\"RegexExtractor.default\">NotFound</stringProp>");
+            line(jmx, "            <stringProp name=\"RegexExtractor.match_number\">1</stringProp>");
+            line(jmx, "            <boolProp name=\"RegexExtractor.default_empty_value\">false</boolProp>");
+            line(jmx, "          </RegexExtractor>");
+            line(jmx, "          <hashTree/>");
         }
     }
 
     private void appendRawBodyArgument(StringBuilder jmx, String body) {
-        jmx.append("              <elementProp name=\"\" elementType=\"HTTPArgument\">\n");
-        jmx.append("                <boolProp name=\"HTTPArgument.always_encode\">false</boolProp>\n");
-        jmx.append("                <stringProp name=\"Argument.name\"></stringProp>\n");
-        jmx.append("                <stringProp name=\"Argument.value\">").append(xml(body)).append("</stringProp>\n");
-        jmx.append("                <stringProp name=\"Argument.metadata\">=</stringProp>\n");
-        jmx.append("                <boolProp name=\"HTTPArgument.use_equals\">false</boolProp>\n");
-        jmx.append("              </elementProp>\n");
+        appendArgument(jmx, "", body, false);
     }
 
     private void appendHttpArgument(StringBuilder jmx, String name, String value) {
-        jmx.append("              <elementProp name=\"").append(xml(name)).append("\" elementType=\"HTTPArgument\">\n");
-        jmx.append("                <boolProp name=\"HTTPArgument.always_encode\">false</boolProp>\n");
-        jmx.append("                <stringProp name=\"Argument.name\">").append(xml(name)).append("</stringProp>\n");
-        jmx.append("                <stringProp name=\"Argument.value\">").append(xml(value)).append("</stringProp>\n");
-        jmx.append("                <stringProp name=\"Argument.metadata\">=</stringProp>\n");
-        jmx.append("                <boolProp name=\"HTTPArgument.use_equals\">true</boolProp>\n");
-        jmx.append("              </elementProp>\n");
+        appendArgument(jmx, name, value, true);
     }
 
     private void appendHeaderManager(StringBuilder jmx, Map<String, String> headers) {
+        line(jmx, "          <HeaderManager guiclass=\"HeaderPanel\" testclass=\"HeaderManager\" testname=\"HTTP Header Manager\" enabled=\"true\">");
+
         if (headers.isEmpty()) {
-            jmx.append("          <HeaderManager guiclass=\"HeaderPanel\" testclass=\"HeaderManager\" testname=\"HTTP Header Manager\" enabled=\"true\">\n");
-            jmx.append("            <collectionProp name=\"HeaderManager.headers\"></collectionProp>\n");
-            jmx.append("          </HeaderManager>\n");
-            jmx.append("          <hashTree/>\n");
-            return;
+            line(jmx, "            <collectionProp name=\"HeaderManager.headers\"></collectionProp>");
+        } else {
+            line(jmx, "            <collectionProp name=\"HeaderManager.headers\">");
+            for (Map.Entry<String, String> header : headers.entrySet()) {
+                line(jmx, "              <elementProp name=\"\" elementType=\"Header\">");
+                line(jmx, "                <stringProp name=\"Header.name\">%s</stringProp>", xml(header.getKey()));
+                line(jmx, "                <stringProp name=\"Header.value\">%s</stringProp>", xml(header.getValue()));
+                line(jmx, "              </elementProp>");
+            }
+            line(jmx, "            </collectionProp>");
         }
 
-        jmx.append("          <HeaderManager guiclass=\"HeaderPanel\" testclass=\"HeaderManager\" testname=\"HTTP Header Manager\" enabled=\"true\">\n");
-        jmx.append("            <collectionProp name=\"HeaderManager.headers\">\n");
-        for (Map.Entry<String, String> header : headers.entrySet()) {
-            jmx.append("              <elementProp name=\"\" elementType=\"Header\">\n");
-            jmx.append("                <stringProp name=\"Header.name\">").append(xml(header.getKey())).append("</stringProp>\n");
-            jmx.append("                <stringProp name=\"Header.value\">").append(xml(header.getValue())).append("</stringProp>\n");
-            jmx.append("              </elementProp>\n");
-        }
-        jmx.append("            </collectionProp>\n");
-        jmx.append("          </HeaderManager>\n");
-        jmx.append("          <hashTree/>\n");
+        line(jmx, "          </HeaderManager>");
+        line(jmx, "          <hashTree/>");
     }
 
     private Map<String, String> filteredHeaders(Map<String, String> headers) {
@@ -270,16 +258,11 @@ public class HarToJmxService {
     }
 
     private boolean isFormEncoded(Map<String, String> headers) {
-        for (Map.Entry<String, String> entry : headers.entrySet()) {
-            if (!"content-type".equalsIgnoreCase(entry.getKey())) {
-                continue;
-            }
-            String value = Objects.toString(entry.getValue(), "").toLowerCase(Locale.ROOT);
-            if (value.contains("application/x-www-form-urlencoded")) {
-                return true;
-            }
+        String contentType = findHeader(headers, "content-type");
+        if (contentType == null) {
+            return false;
         }
-        return false;
+        return contentType.toLowerCase(Locale.ROOT).contains("application/x-www-form-urlencoded");
     }
 
     private List<NameValue> parsePairs(String text) {
@@ -290,11 +273,18 @@ public class HarToJmxService {
         List<NameValue> out = new ArrayList<>(pairs.length);
         for (String pair : pairs) {
             String[] split = pair.split("=", 2);
-            String name = split.length > 0 ? split[0] : "";
-            String value = split.length > 1 ? split[1] : "";
-            out.add(new NameValue(name, value));
+            out.add(new NameValue(split[0], split.length > 1 ? split[1] : ""));
         }
         return out;
+    }
+
+    private String findHeader(Map<String, String> headers, String name) {
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            if (name.equalsIgnoreCase(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     private UrlParts parseUrl(String rawUrl) {
@@ -341,7 +331,7 @@ public class HarToJmxService {
         int colon = hostPort.lastIndexOf(':');
         if (colon > 0 && colon + 1 < hostPort.length()) {
             String candidatePort = hostPort.substring(colon + 1);
-            if (candidatePort.matches("\\d+")) {
+            if (DIGITS.matcher(candidatePort).matches()) {
                 domain = hostPort.substring(0, colon);
                 port = candidatePort;
             }
@@ -401,10 +391,10 @@ public class HarToJmxService {
             return "Home";
         }
 
-        text = text.replaceAll("[_\\s]+", "-");
-        text = text.replaceAll("[^A-Za-z0-9-]+", "-");
-        text = text.replaceAll("-+", "-");
-        text = text.replaceAll("^-|-$", "");
+        text = LABEL_SPACES.matcher(text).replaceAll("-");
+        text = LABEL_NON_ALNUM.matcher(text).replaceAll("-");
+        text = LABEL_DASH_RUNS.matcher(text).replaceAll("-");
+        text = LABEL_EDGE_DASHES.matcher(text).replaceAll("");
         if (text.isBlank()) {
             return "Home";
         }
@@ -441,6 +431,20 @@ public class HarToJmxService {
             }
         });
         return cleaned.toString();
+    }
+
+    private void appendArgument(StringBuilder jmx, String name, String value, boolean useEquals) {
+        line(jmx, "              <elementProp name=\"%s\" elementType=\"HTTPArgument\">", xml(name));
+        line(jmx, "                <boolProp name=\"HTTPArgument.always_encode\">false</boolProp>");
+        line(jmx, "                <stringProp name=\"Argument.name\">%s</stringProp>", xml(name));
+        line(jmx, "                <stringProp name=\"Argument.value\">%s</stringProp>", xml(value));
+        line(jmx, "                <stringProp name=\"Argument.metadata\">=</stringProp>");
+        line(jmx, "                <boolProp name=\"HTTPArgument.use_equals\">%s</boolProp>", useEquals);
+        line(jmx, "              </elementProp>");
+    }
+
+    private void line(StringBuilder out, String template, Object... args) {
+        out.append(args.length == 0 ? template : template.formatted(args)).append('\n');
     }
 
     private record UrlParts(

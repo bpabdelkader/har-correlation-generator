@@ -21,11 +21,16 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
+/**
+ * @author bpabdelkader
+ */
 @Controller
 @Validated
 public class HarController {
@@ -33,6 +38,7 @@ public class HarController {
     private static final String SESSION_MODIFIED_HAR = "modifiedHar";
     private static final String SESSION_ANALYSIS_RESULT = "analysisResult";
     private static final String SESSION_ORIGINAL_HAR_FILENAME = "originalHarFilename";
+    private static final String INDEX_VIEW = "index";
 
     private final HarAnalysisService harAnalysisService;
     private final HarToJmxService harToJmxService;
@@ -46,14 +52,14 @@ public class HarController {
 
     @GetMapping("/")
     public String index(Model model) {
-        return "index";
+        return INDEX_VIEW;
     }
 
     @PostMapping("/analyze")
     public String analyze(@RequestParam("harFile") @NotNull MultipartFile harFile, Model model, HttpSession session) {
         if (harFile.isEmpty()) {
             model.addAttribute("error", "The HAR file is empty.");
-            return "index";
+            return INDEX_VIEW;
         }
 
         try {
@@ -64,7 +70,7 @@ public class HarController {
             return "redirect:/result";
         } catch (Exception e) {
             model.addAttribute("error", "Error while processing HAR: " + e.getMessage());
-            return "index";
+            return INDEX_VIEW;
         }
     }
 
@@ -78,58 +84,42 @@ public class HarController {
         return "result";
     }
 
+    @PostMapping("/path-suggestions/apply")
+    public String applyPathSuggestions(
+            @RequestParam(name = "suggestionIndexes", required = false) List<Integer> suggestionIndexes,
+            HttpSession session
+    ) throws Exception {
+        AnalysisResult result = requiredSessionAttribute(session, SESSION_ANALYSIS_RESULT, AnalysisResult.class, "No analysis result available.");
+        Collection<Integer> indexes = suggestionIndexes == null ? List.of() : suggestionIndexes;
+        AnalysisResult updated = harAnalysisService.applyPathRewriteSuggestions(result, indexes);
+        session.setAttribute(SESSION_ANALYSIS_RESULT, updated);
+        session.setAttribute(SESSION_MODIFIED_HAR, updated.modifiedHarJson().getBytes(StandardCharsets.UTF_8));
+        return "redirect:/result";
+    }
+
     @GetMapping("/download/har")
     @ResponseBody
     public ResponseEntity<byte[]> downloadHar(HttpSession session) {
-        Object stored = session.getAttribute(SESSION_MODIFIED_HAR);
-        if (!(stored instanceof byte[] bytes)) {
-            throw new ResponseStatusException(NOT_FOUND, "No modified HAR available.");
-        }
-
-        String originalName = null;
-        Object originalStored = session.getAttribute(SESSION_ORIGINAL_HAR_FILENAME);
-        if (originalStored instanceof String name && !name.isBlank()) {
-            originalName = name;
-        }
-        String filename = buildModifiedFilename(originalName, "modified.har");
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setContentDisposition(ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build());
-        return ResponseEntity.ok().headers(headers).body(bytes);
+        byte[] bytes = requiredSessionAttribute(session, SESSION_MODIFIED_HAR, byte[].class, "No modified HAR available.");
+        return download(bytes, MediaType.APPLICATION_JSON, buildModifiedFilename(originalSessionFilename(session), "modified.har"));
     }
 
     @GetMapping("/download/jmx")
     @ResponseBody
     public ResponseEntity<byte[]> downloadJmx(HttpSession session) {
-        Object stored = session.getAttribute(SESSION_ANALYSIS_RESULT);
-        if (!(stored instanceof AnalysisResult result)) {
-            throw new ResponseStatusException(NOT_FOUND, "No analysis result available.");
-        }
-
+        AnalysisResult result = requiredSessionAttribute(session, SESSION_ANALYSIS_RESULT, AnalysisResult.class, "No analysis result available.");
         String jmx = harToJmxService.toJmx(result.rewrittenRequests(), result.variables(), result.regexByVariable());
-        byte[] bytes = jmx.getBytes(StandardCharsets.UTF_8);
-
-        String originalName = null;
-        Object originalStored = session.getAttribute(SESSION_ORIGINAL_HAR_FILENAME);
-        if (originalStored instanceof String name && !name.isBlank()) {
-            originalName = name;
-        }
-        String filename = buildSiblingFilename(originalName, ".jmx", "modified.jmx");
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_XML);
-        headers.setContentDisposition(ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build());
-        return ResponseEntity.ok().headers(headers).body(bytes);
+        return download(
+                jmx.getBytes(StandardCharsets.UTF_8),
+                MediaType.APPLICATION_XML,
+                buildSiblingFilename(originalSessionFilename(session), ".jmx", "modified.jmx")
+        );
     }
 
     @GetMapping("/download/rules")
     @ResponseBody
     public ResponseEntity<byte[]> downloadRules(HttpSession session) throws Exception {
-        Object stored = session.getAttribute(SESSION_ANALYSIS_RESULT);
-        if (!(stored instanceof AnalysisResult result)) {
-            throw new ResponseStatusException(NOT_FOUND, "No analysis result available.");
-        }
+        AnalysisResult result = requiredSessionAttribute(session, SESSION_ANALYSIS_RESULT, AnalysisResult.class, "No analysis result available.");
 
         Map<String, String> variables = new LinkedHashMap<>();
         Map<String, String> regexByVariable = result.regexByVariable() == null ? Map.of() : result.regexByVariable();
@@ -147,12 +137,11 @@ public class HarController {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("variables", variables);
 
-        byte[] bytes = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(payload);
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setContentDisposition(ContentDisposition.attachment().filename("correlation-rules.json").build());
-        return ResponseEntity.ok().headers(headers).body(bytes);
+        return download(
+                objectMapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(payload),
+                MediaType.APPLICATION_JSON,
+                "correlation-rules.json"
+        );
     }
 
     private String safeFilename(String input) {
@@ -203,5 +192,25 @@ public class HarController {
         }
 
         return name + newExtension;
+    }
+
+    private String originalSessionFilename(HttpSession session) {
+        Object stored = session.getAttribute(SESSION_ORIGINAL_HAR_FILENAME);
+        return stored instanceof String name && !name.isBlank() ? name : null;
+    }
+
+    private <T> T requiredSessionAttribute(HttpSession session, String key, Class<T> type, String message) {
+        Object stored = session.getAttribute(key);
+        if (type.isInstance(stored)) {
+            return type.cast(stored);
+        }
+        throw new ResponseStatusException(NOT_FOUND, message);
+    }
+
+    private ResponseEntity<byte[]> download(byte[] bytes, MediaType mediaType, String filename) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(mediaType);
+        headers.setContentDisposition(ContentDisposition.attachment().filename(filename, StandardCharsets.UTF_8).build());
+        return ResponseEntity.ok().headers(headers).body(bytes);
     }
 }
