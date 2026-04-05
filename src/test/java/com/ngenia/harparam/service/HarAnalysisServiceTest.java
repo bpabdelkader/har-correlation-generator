@@ -10,6 +10,9 @@ import java.io.InputStream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * @author bpabdelkader
+ */
 class HarAnalysisServiceTest {
 
     private static final String TEST_HAR_RESOURCE = "TestHAR-min.har";
