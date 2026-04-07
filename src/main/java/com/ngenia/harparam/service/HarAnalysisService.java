@@ -2,10 +2,10 @@ package com.ngenia.harparam.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.ngenia.harparam.model.AnalysisResult;
-import com.ngenia.harparam.model.PathRewriteSuggestion;
 import com.ngenia.harparam.model.RewrittenRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -25,6 +25,9 @@ import java.util.regex.Pattern;
 @Service
 public class HarAnalysisService {
 
+    private static final String JMETER_TIME_NOW_FUNCTION = "${__time(,)}";
+    private static final long MIN_REASONABLE_EPOCH_MS = 946684800000L;
+    private static final long MAX_REASONABLE_EPOCH_MS = 4102444800000L;
     private static final Pattern VAR_SAFE = Pattern.compile("[^a-zA-Z0-9_]");
     private static final Pattern VAR_TOKEN = Pattern.compile("\\$\\{([^}]+)}");
     private static final Pattern UNDERSCORE_RUNS = Pattern.compile("_+");
@@ -46,6 +49,7 @@ public class HarAnalysisService {
     private final HarRequestClassifier requestClassifier;
     private final SourceMatchFinder sourceMatchFinder;
     private final CorrelationRegexBuilder regexBuilder;
+    private final ObjectWriter prettyWriter;
 
     public HarAnalysisService(ObjectMapper objectMapper) {
         this(
@@ -67,6 +71,7 @@ public class HarAnalysisService {
         this.requestClassifier = requestClassifier;
         this.sourceMatchFinder = sourceMatchFinder;
         this.regexBuilder = regexBuilder;
+        this.prettyWriter = objectMapper.writerWithDefaultPrettyPrinter();
     }
 
     public AnalysisResult analyze(MultipartFile harFile) throws IOException {
@@ -86,7 +91,6 @@ public class HarAnalysisService {
         Map<String, String> valueToVariable = new LinkedHashMap<>();
         Map<String, SourceMatch> variableToSourceMatch = new LinkedHashMap<>();
         Set<String> usedVariableNames = new LinkedHashSet<>();
-        List<PathRewriteSuggestion> pathRewriteSuggestions = new ArrayList<>();
         SourceMatchFinder.SourceSearchIndex sourceSearchIndex = sourceMatchFinder.newIndex();
         Set<String> allowedHostRoots = requestClassifier.determineAllowedHostRoots(originalEntries);
         FilteredEntries filteredEntries = filterBusinessEntries(originalEntries, modifiedEntries, allowedHostRoots);
@@ -96,8 +100,7 @@ public class HarAnalysisService {
                 variableToSourceMatch,
                 variables,
                 usedVariableNames,
-                sourceSearchIndex,
-                pathRewriteSuggestions
+                sourceSearchIndex
         );
 
         int count = Math.min(filteredEntries.originalEntries().size(), filteredEntries.modifiedEntries().size());
@@ -125,121 +128,16 @@ public class HarAnalysisService {
                 variableToSourceMatch,
                 variables
         );
-        String modifiedHarJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(modifiedRoot);
-        String variablesJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(variablesWrapper);
+        String modifiedHarJson = prettyWriter.writeValueAsString(modifiedRoot);
         Map<String, String> regexByVariable = regexBuilder.buildRegexByVariable(variableToSourceMatch, variables);
+        applyJmeterRuntimeVariableOverrides(variables, regexByVariable, variablesWrapper);
         return new AnalysisResult(
                 variables,
                 regexByVariable,
-                variablesJson,
+                prettyWriter.writeValueAsString(variablesWrapper),
                 modifiedHarJson,
                 rewrittenRequests,
-                List.copyOf(pathRewriteSuggestions)
-        );
-    }
-
-    public AnalysisResult applyPathRewriteSuggestions(AnalysisResult result, Collection<Integer> suggestionIndexes) throws IOException {
-        if (result == null || result.pathRewriteSuggestions() == null || result.pathRewriteSuggestions().isEmpty()
-                || suggestionIndexes == null || suggestionIndexes.isEmpty()) {
-            return result;
-        }
-
-        Set<Integer> acceptedIndexes = new LinkedHashSet<>();
-        for (Integer suggestionIndex : suggestionIndexes) {
-            if (suggestionIndex != null && suggestionIndex >= 0 && suggestionIndex < result.pathRewriteSuggestions().size()) {
-                acceptedIndexes.add(suggestionIndex);
-            }
-        }
-        if (acceptedIndexes.isEmpty()) {
-            return result;
-        }
-
-        JsonNode parsedRoot = objectMapper.readTree(result.modifiedHarJson());
-        if (!(parsedRoot instanceof ObjectNode root)) {
-            return result;
-        }
-        JsonNode entriesNode = root.path("log").path("entries");
-        if (!(entriesNode instanceof ArrayNode entries)) {
-            return result;
-        }
-
-        Map<Integer, String> acceptedUrlByRequestIndex = new LinkedHashMap<>();
-        Map<String, String> acceptedVariables = new LinkedHashMap<>();
-        List<PathRewriteSuggestion> remainingSuggestions = new ArrayList<>();
-        for (int i = 0; i < result.pathRewriteSuggestions().size(); i++) {
-            PathRewriteSuggestion suggestion = result.pathRewriteSuggestions().get(i);
-            if (acceptedIndexes.contains(i)) {
-                acceptedUrlByRequestIndex.put(suggestion.requestIndex(), suggestion.proposedUrl());
-                acceptedVariables.putIfAbsent(suggestion.variableName(), suggestion.value());
-            } else {
-                remainingSuggestions.add(suggestion);
-            }
-        }
-        if (acceptedUrlByRequestIndex.isEmpty()) {
-            return result;
-        }
-
-        for (int i = 0; i < entries.size(); i++) {
-            JsonNode entryNode = entries.get(i);
-            if (!(entryNode instanceof ObjectNode entry)) {
-                continue;
-            }
-            JsonNode requestNode = entry.path("request");
-            if (!(requestNode instanceof ObjectNode request)) {
-                continue;
-            }
-            String acceptedUrl = acceptedUrlByRequestIndex.get(i + 1);
-            if (acceptedUrl != null && !acceptedUrl.isBlank()) {
-                request.put("url", acceptedUrl);
-            }
-        }
-
-        List<RewrittenRequest> updatedRequests = new ArrayList<>(result.rewrittenRequests().size());
-        for (RewrittenRequest request : result.rewrittenRequests()) {
-            String acceptedUrl = acceptedUrlByRequestIndex.get(request.index());
-            if (acceptedUrl == null || acceptedUrl.isBlank() || !"MODIFIED".equals(request.kind())) {
-                updatedRequests.add(request);
-                continue;
-            }
-            updatedRequests.add(new RewrittenRequest(
-                    request.index(),
-                    request.kind(),
-                    request.name(),
-                    request.method(),
-                    request.startedDateTime(),
-                    request.sourceIndex(),
-                    request.sourceName(),
-                    request.sourceMethod(),
-                    request.sourceUrl(),
-                    request.sourceBody(),
-                    request.sourceVariableName(),
-                    request.sourceVariableValue(),
-                    request.sourceExtractionType(),
-                    request.sourceHeaderName(),
-                    request.sourceHeaderValue(),
-                    request.sourceResponseBody(),
-                    request.sourceVariables(),
-                    request.originalUrl(),
-                    acceptedUrl,
-                    request.originalHeaders(),
-                    request.rewrittenHeaders(),
-                    request.originalBody(),
-                    request.rewrittenBody()
-            ));
-        }
-
-        String modifiedHarJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
-        Map<String, String> updatedVariables = new LinkedHashMap<>(result.variables());
-        updatedVariables.putAll(acceptedVariables);
-        ObjectNode variablesWrapper = objectMapper.createObjectNode();
-        variablesWrapper.set("variables", objectMapper.valueToTree(updatedVariables));
-        return new AnalysisResult(
-                updatedVariables,
-                result.regexByVariable(),
-                objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(variablesWrapper),
-                modifiedHarJson,
-                updatedRequests,
-                remainingSuggestions
+                List.of()
         );
     }
 
@@ -297,10 +195,10 @@ public class HarAnalysisService {
             for (String variableName : variableNames) {
                 SourceMatch match = variableToSourceMatch.get(variableName);
                 String value = variables.get(variableName);
-                requestVariables.putIfAbsent(variableName, value);
                 if (match == null) {
                     continue;
                 }
+                requestVariables.putIfAbsent(variableName, value);
 
                 RequestRef ref = match.requestRef();
                 if (ref != null) {
@@ -484,13 +382,19 @@ public class HarAnalysisService {
         }
         Matcher direct = VAR_TOKEN.matcher(text);
         while (direct.find()) {
-            target.add(direct.group(1));
+            String token = direct.group(1);
+            if (!isJmeterFunctionExpression("${" + token + "}")) {
+                target.add(token);
+            }
         }
 
         String decoded = decode(text);
         Matcher decodedMatcher = VAR_TOKEN.matcher(decoded);
         while (decodedMatcher.find()) {
-            target.add(decodedMatcher.group(1));
+            String token = decodedMatcher.group(1);
+            if (!isJmeterFunctionExpression("${" + token + "}")) {
+                target.add(token);
+            }
         }
     }
 
@@ -551,8 +455,6 @@ public class HarAnalysisService {
     ) {
         String[] segments = path.split("/", -1);
         String previousLiteralSegment = null;
-        List<PendingPathSuggestion> pendingSuggestions = new ArrayList<>();
-
         for (int i = 0; i < segments.length; i++) {
             String rawSegment = segments[i];
             if (rawSegment == null || rawSegment.isBlank()) {
@@ -579,29 +481,7 @@ public class HarAnalysisService {
                 continue;
             }
 
-            if (looksLikePathVariableCandidate(decodedSegment)) {
-                String proposedVariableName = toSafeVariableName(variableHint);
-                pendingSuggestions.add(new PendingPathSuggestion(i, proposedVariableName, decodedSegment));
-            }
-
             previousLiteralSegment = decodedSegment;
-        }
-
-        if (!pendingSuggestions.isEmpty()) {
-            String currentUrl = urlPrefix + String.join("/", segments) + query + fragment;
-            for (PendingPathSuggestion pendingSuggestion : pendingSuggestions) {
-                String[] proposedSegments = segments.clone();
-                proposedSegments[pendingSuggestion.segmentIndex()] = "${" + pendingSuggestion.variableName() + "}";
-                context.pathRewriteSuggestions().add(new PathRewriteSuggestion(
-                        requestIndex,
-                        requestName,
-                        originalUrl,
-                        currentUrl,
-                        urlPrefix + String.join("/", proposedSegments) + query + fragment,
-                        pendingSuggestion.variableName(),
-                        pendingSuggestion.value()
-                ));
-            }
         }
 
         return String.join("/", segments);
@@ -746,18 +626,17 @@ public class HarAnalysisService {
     }
 
     private void rewriteJsonObject(ObjectNode object, RewriteContext context) {
-        List<String> fieldNames = new ArrayList<>();
-        object.fieldNames().forEachRemaining(fieldNames::add);
-
-        for (String fieldName : fieldNames) {
-            JsonNode child = object.get(fieldName);
+        for (Iterator<Map.Entry<String, JsonNode>> it = object.fields(); it.hasNext(); ) {
+            Map.Entry<String, JsonNode> field = it.next();
+            String fieldName = field.getKey();
+            JsonNode child = field.getValue();
             if (child == null || child.isNull()) {
                 continue;
             }
             if (child.isValueNode()) {
-                String variableName = resolveVariableName(fieldName, child.asText(""), context);
-                if (variableName != null) {
-                    object.put(fieldName, "${" + variableName + "}");
+                String replacement = resolveVariableName(fieldName, child.asText(""), context);
+                if (replacement != null) {
+                    object.put(fieldName, replacementValue(replacement));
                 }
                 continue;
             }
@@ -778,9 +657,9 @@ public class HarAnalysisService {
                 continue;
             }
             if (child.isValueNode()) {
-                String variableName = resolveVariableName(nameHint, child.asText(""), context);
-                if (variableName != null) {
-                    array.set(i, objectMapper.getNodeFactory().textNode("${" + variableName + "}"));
+                String replacement = resolveVariableName(nameHint, child.asText(""), context);
+                if (replacement != null) {
+                    array.set(i, objectMapper.getNodeFactory().textNode(replacementValue(replacement)));
                 }
                 continue;
             }
@@ -795,35 +674,44 @@ public class HarAnalysisService {
     }
 
     private String rewriteDelimitedAssignments(String text, RewriteContext context) {
-        String[] pairs = text.split("&", -1);
-        StringBuilder rewritten = new StringBuilder();
-        for (int i = 0; i < pairs.length; i++) {
-            if (i > 0) {
+        StringBuilder rewritten = new StringBuilder(text.length() + 16);
+        int pairStart = 0;
+        int pairIndex = 0;
+        while (pairStart <= text.length()) {
+            if (pairIndex > 0) {
                 rewritten.append('&');
             }
 
-            String pair = pairs[i];
+            int amp = text.indexOf('&', pairStart);
+            int pairEnd = amp >= 0 ? amp : text.length();
+            String pair = text.substring(pairStart, pairEnd);
             if (pair.isBlank()) {
                 rewritten.append(pair);
-                continue;
-            }
+            } else {
+                int eq = pair.indexOf('=');
+                String rawName = eq >= 0 ? pair.substring(0, eq) : pair;
+                String rawValue = eq >= 0 ? pair.substring(eq + 1) : "";
+                String name = decode(rawName);
+                String value = decode(rawValue);
+                String replacement = resolveVariableName(name, value, context);
 
-            String[] split = pair.split("=", 2);
-            String rawName = split[0];
-            String rawValue = split.length > 1 ? split[1] : "";
-            String name = decode(rawName);
-            String value = decode(rawValue);
-            String variableName = resolveVariableName(name, value, context);
-
-            rewritten.append(rawName);
-            if (split.length > 1) {
-                rewritten.append('=');
-                if (variableName != null) {
-                    rewritten.append("${").append(variableName).append('}');
+                rewritten.append(rawName);
+                if (eq >= 0) {
+                    rewritten.append('=');
+                    if (replacement != null) {
+                        rewritten.append(replacementValue(replacement));
+                    } else {
+                        rewritten.append(rawValue);
+                    }
                 } else {
                     rewritten.append(rawValue);
                 }
             }
+            if (amp < 0) {
+                break;
+            }
+            pairStart = amp + 1;
+            pairIndex++;
         }
         return rewritten.toString();
     }
@@ -836,13 +724,13 @@ public class HarAnalysisService {
             if (!(paramNode instanceof ObjectNode param)) {
                 continue;
             }
-            String variableName = resolveVariableName(
+            String replacement = resolveVariableName(
                     param.path("name").asText(fallbackName),
                     param.path("value").asText(""),
                     context
             );
-            if (variableName != null) {
-                param.put("value", "${" + variableName + "}");
+            if (replacement != null) {
+                param.put("value", replacementValue(replacement));
             }
         }
     }
@@ -898,6 +786,10 @@ public class HarAnalysisService {
             return existing;
         }
 
+        if (isEpochMillisTimestamp(normalizedValue)) {
+            return JMETER_TIME_NOW_FUNCTION;
+        }
+
         SourceMatch sourceMatch = context.sourceSearchIndex.findFirstSourceMatch(parameterName, normalizedValue);
         if (sourceMatch == null) {
             return null;
@@ -909,6 +801,15 @@ public class HarAnalysisService {
         context.variableToSourceMatch.put(variableName, sourceMatch);
         context.variables.put(variableName, normalizedValue);
         return variableName;
+    }
+
+    private String replacementValue(String replacement) {
+        return isJmeterFunctionExpression(replacement) ? replacement : "${" + replacement + "}";
+    }
+
+    private boolean isJmeterFunctionExpression(String value) {
+        String text = Objects.toString(value, "").trim();
+        return text.startsWith("${__") && text.endsWith("}");
     }
 
     private <T> T firstNonNull(T first, T fallback) {
@@ -951,6 +852,9 @@ public class HarAnalysisService {
     }
 
     private String decode(String value) {
+        if (value == null || (value.indexOf('%') < 0 && value.indexOf('+') < 0)) {
+            return value;
+        }
         try {
             return URLDecoder.decode(value, StandardCharsets.UTF_8);
         } catch (Exception e) {
@@ -971,6 +875,55 @@ public class HarAnalysisService {
             return false;
         }
         return EXCLUDED_DYNAMIC_PARAM_NAMES.contains(normalized);
+    }
+
+    private void applyJmeterRuntimeVariableOverrides(
+            Map<String, String> variables,
+            Map<String, String> regexByVariable,
+            ObjectNode variablesWrapper
+    ) {
+        if (variables == null || variables.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, String> entry : variables.entrySet()) {
+            String variableName = entry.getKey();
+            String override = jmeterRuntimeValueFor(entry.getValue());
+            if (override == null) {
+                continue;
+            }
+            entry.setValue(override);
+            if (regexByVariable != null) {
+                regexByVariable.remove(variableName);
+            }
+            if (variablesWrapper != null && variablesWrapper.path("variables") instanceof ObjectNode variableObject) {
+                variableObject.put(variableName, override);
+            }
+        }
+    }
+
+    private String jmeterRuntimeValueFor(String value) {
+        if (isEpochMillisTimestamp(value)) {
+            return JMETER_TIME_NOW_FUNCTION;
+        }
+        return null;
+    }
+
+    private boolean isEpochMillisTimestamp(String value) {
+        String text = Objects.toString(value, "").trim();
+        if (text.length() != 13) {
+            return false;
+        }
+        for (int i = 0; i < text.length(); i++) {
+            if (!Character.isDigit(text.charAt(i))) {
+                return false;
+            }
+        }
+        try {
+            long epochMs = Long.parseLong(text);
+            return epochMs >= MIN_REASONABLE_EPOCH_MS && epochMs <= MAX_REASONABLE_EPOCH_MS;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private String normalizeParameterName(String parameterName) {
@@ -1135,15 +1088,11 @@ public class HarAnalysisService {
             Map<String, SourceMatch> variableToSourceMatch,
             Map<String, String> variables,
             Set<String> usedVariableNames,
-            SourceMatchFinder.SourceSearchIndex sourceSearchIndex,
-            List<PathRewriteSuggestion> pathRewriteSuggestions
+            SourceMatchFinder.SourceSearchIndex sourceSearchIndex
     ) {
     }
 
     private record FilteredEntries(ArrayNode originalEntries, ArrayNode modifiedEntries) {
-    }
-
-    private record PendingPathSuggestion(int segmentIndex, String variableName, String value) {
     }
 
     private static final class SourceMetadata {

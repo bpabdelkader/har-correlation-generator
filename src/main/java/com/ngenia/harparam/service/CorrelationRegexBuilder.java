@@ -16,6 +16,7 @@ import java.util.regex.Pattern;
 class CorrelationRegexBuilder {
 
     private static final Pattern JSON_STRING_FIELD_PREFIX = Pattern.compile("\"([^\"]{1,80})\"\\s*:\\s*\"");
+    private static final Pattern JSON_RAW_FIELD_PREFIX = Pattern.compile("\"([^\"]{1,80})\"\\s*:\\s*");
     private static final String[] URL_PARAM_SEPARATORS = {"?", "&", "\\u0026", "&amp;", "%3F", "%26"};
     private static final String[] URL_PARAM_ASSIGNMENTS = {"=", "\\u003d", "%3D"};
     private static final String[] URL_PARAM_SUFFIXES = {"&", "\\u0026", "&amp;", "#", "\\u0023", "%26", "%23"};
@@ -64,9 +65,9 @@ class CorrelationRegexBuilder {
         }
 
         String jsonFieldRegex = firstNonBlank(
-                tryBuildJsonStringFieldRegex(response, value, match.parameterName()),
-                tryBuildJsonStringFieldRegex(requestBody, value, match.parameterName()),
-                tryBuildJsonStringFieldRegex(requestUrl, value, match.parameterName())
+                tryBuildJsonFieldRegex(response, value, match.parameterName()),
+                tryBuildJsonFieldRegex(requestBody, value, match.parameterName()),
+                tryBuildJsonFieldRegex(requestUrl, value, match.parameterName())
         );
         if (jsonFieldRegex != null) {
             return jsonFieldRegex;
@@ -191,7 +192,7 @@ class CorrelationRegexBuilder {
         }
     }
 
-    private String tryBuildJsonStringFieldRegex(String text, String value, String parameterName) {
+    private String tryBuildJsonFieldRegex(String text, String value, String parameterName) {
         if (text == null || text.isBlank() || value == null || value.isBlank()) {
             return null;
         }
@@ -202,10 +203,18 @@ class CorrelationRegexBuilder {
             if (text.contains(plainNeedle)) {
                 return "\"" + regexEscapeLiteral(expectedKey) + "\"\\s*:\\s*\"(.+?)\"";
             }
+            String plainRawNeedle = "\"" + expectedKey + "\":" + value;
+            if (text.contains(plainRawNeedle)) {
+                return "\"" + regexEscapeLiteral(expectedKey) + "\"\\s*:\\s*(" + scalarCapturePattern(value) + ")";
+            }
 
             String escapedNeedle = "\\\"" + expectedKey + "\\\":\\\"" + value + "\\\"";
             if (text.contains(escapedNeedle)) {
                 return "\\\\\"" + regexEscapeLiteral(expectedKey) + "\\\\\":\\\\\"(.+?)\\\\\"";
+            }
+            String escapedRawNeedle = "\\\"" + expectedKey + "\\\":" + value;
+            if (text.contains(escapedRawNeedle)) {
+                return "\\\\\"" + regexEscapeLiteral(expectedKey) + "\\\\\":(" + scalarCapturePattern(value) + ")";
             }
         }
 
@@ -224,7 +233,30 @@ class CorrelationRegexBuilder {
             }
         }
 
+        Matcher rawMatcher = JSON_RAW_FIELD_PREFIX.matcher(text);
+        while (rawMatcher.find()) {
+            if (rawMatcher.end() == idx) {
+                String key = rawMatcher.group(1);
+                if (key != null && !key.isBlank() && (expectedKey.isBlank() || key.equals(expectedKey))) {
+                    return "\"" + regexEscapeLiteral(key) + "\"\\s*:\\s*(" + scalarCapturePattern(value) + ")";
+                }
+            }
+        }
+
         return null;
+    }
+
+    private String scalarCapturePattern(String value) {
+        if (value.matches("-?\\d+")) {
+            return "\\\\d+";
+        }
+        if (value.matches("-?\\d+\\.\\d+")) {
+            return "-?\\\\d+(?:\\\\.\\\\d+)?";
+        }
+        if ("true".equals(value) || "false".equals(value) || "null".equals(value)) {
+            return regexEscapeLiteral(value);
+        }
+        return ".+?";
     }
 
     private String buildDelimitedRegex(String haystack, String value, int beforeLimit, int afterLimit) {

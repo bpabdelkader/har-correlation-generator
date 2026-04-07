@@ -184,6 +184,14 @@
             font-size: 0.88rem;
             line-height: 1.5;
         }
+        .page-version {
+            margin-top: 14px;
+            text-align: right;
+            color: var(--text-dim);
+            font-size: 0.78rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
         .error {
             color: var(--danger);
             margin: 0 0 12px;
@@ -247,6 +255,7 @@
             </div>
         </aside>
     </div>
+    <div class="page-version" th:text="${'Version ' + appVersion}">Version dev</div>
 </div>
 </body>
 </html>

@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.InputStream;
-
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**

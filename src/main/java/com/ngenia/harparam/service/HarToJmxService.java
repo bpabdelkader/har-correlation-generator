@@ -18,7 +18,6 @@ import java.util.regex.Pattern;
 @Service
 public class HarToJmxService {
 
-    private static final Pattern DIGITS = Pattern.compile("\\d+");
     private static final Pattern LABEL_SPACES = Pattern.compile("[_\\s]+");
     private static final Pattern LABEL_NON_ALNUM = Pattern.compile("[^A-Za-z0-9-]+");
     private static final Pattern LABEL_DASH_RUNS = Pattern.compile("-+");
@@ -42,7 +41,12 @@ public class HarToJmxService {
         line(jmx, "      <stringProp name=\"TestPlan.user_define_classpath\"></stringProp>");
         line(jmx, "    </TestPlan>");
         line(jmx, "    <hashTree>");
-        appendThreadGroups(jmx, requests == null ? List.of() : requests, regexByVariable == null ? Map.of() : regexByVariable);
+        appendThreadGroups(
+                jmx,
+                requests == null ? List.of() : requests,
+                variables == null ? Map.of() : variables,
+                regexByVariable == null ? Map.of() : regexByVariable
+        );
         line(jmx, "    </hashTree>");
         line(jmx, "  </hashTree>");
         line(jmx, "</jmeterTestPlan>");
@@ -66,7 +70,7 @@ public class HarToJmxService {
         }
     }
 
-    private void appendSamplers(StringBuilder jmx, List<RewrittenRequest> requests, Map<String, String> regexByVariable) {
+    private void appendSamplers(StringBuilder jmx, List<RewrittenRequest> requests, Map<String, String> variables, Map<String, String> regexByVariable) {
         for (RewrittenRequest req : requests) {
             UrlParts url = parseUrl(req.rewrittenUrl());
             Map<String, String> headers = filteredHeaders(req.rewrittenHeaders());
@@ -112,20 +116,20 @@ public class HarToJmxService {
             line(jmx, "          <boolProp name=\"HTTPSampler.postBodyRaw\">%s</boolProp>", rawBody);
             line(jmx, "        </HTTPSamplerProxy>");
             line(jmx, "        <hashTree>");
-            appendRegexExtractors(jmx, req.sourceVariables(), regexByVariable);
+            appendRegexExtractors(jmx, req.sourceVariables(), variables, regexByVariable);
             appendHeaderManager(jmx, headers);
             line(jmx, "        </hashTree>");
         }
     }
 
-    private void appendThreadGroups(StringBuilder jmx, List<RewrittenRequest> requests, Map<String, String> regexByVariable) {
+    private void appendThreadGroups(StringBuilder jmx, List<RewrittenRequest> requests, Map<String, String> variables, Map<String, String> regexByVariable) {
         List<List<RewrittenRequest>> containers = groupRequestsByContainer(requests);
         for (int i = 0; i < containers.size(); i++) {
             List<RewrittenRequest> container = containers.get(i);
             if (container.isEmpty()) {
                 continue;
             }
-            appendThreadGroup(jmx, container, i + 1, regexByVariable);
+            appendThreadGroup(jmx, container, i + 1, variables, regexByVariable);
         }
     }
 
@@ -166,7 +170,7 @@ public class HarToJmxService {
         return groups;
     }
 
-    private void appendThreadGroup(StringBuilder jmx, List<RewrittenRequest> requests, int groupIndex, Map<String, String> regexByVariable) {
+    private void appendThreadGroup(StringBuilder jmx, List<RewrittenRequest> requests, int groupIndex, Map<String, String> variables, Map<String, String> regexByVariable) {
         String threadGroupName = transactionTitleFor(requests.get(0), groupIndex);
         line(jmx, "      <ThreadGroup guiclass=\"ThreadGroupGui\" testclass=\"ThreadGroup\" testname=\"%s\" enabled=\"true\">", xml(threadGroupName));
         line(jmx, "        <stringProp name=\"ThreadGroup.on_sample_error\">continue</stringProp>");
@@ -181,11 +185,11 @@ public class HarToJmxService {
         line(jmx, "        <stringProp name=\"ThreadGroup.delay\"></stringProp>");
         line(jmx, "      </ThreadGroup>");
         line(jmx, "      <hashTree>");
-        appendSamplers(jmx, requests, regexByVariable);
+        appendSamplers(jmx, requests, variables, regexByVariable);
         line(jmx, "      </hashTree>");
     }
 
-    private void appendRegexExtractors(StringBuilder jmx, Map<String, String> sourceVariables, Map<String, String> regexByVariable) {
+    private void appendRegexExtractors(StringBuilder jmx, Map<String, String> sourceVariables, Map<String, String> variables, Map<String, String> regexByVariable) {
         if (sourceVariables == null || sourceVariables.isEmpty() || regexByVariable == null || regexByVariable.isEmpty()) {
             return;
         }
@@ -193,7 +197,7 @@ public class HarToJmxService {
         for (String variableName : sourceVariables.keySet()) {
             String name = Objects.toString(variableName, "");
             String regex = regexByVariable.get(name);
-            if (name.isBlank() || regex == null || regex.isBlank()) {
+            if (name.isBlank() || regex == null || regex.isBlank() || isJmeterFunctionValue(variables.get(name))) {
                 continue;
             }
             line(jmx, "          <RegexExtractor guiclass=\"RegexExtractorGui\" testclass=\"RegexExtractor\" testname=\"%s\">", xml(name));
@@ -207,6 +211,11 @@ public class HarToJmxService {
             line(jmx, "          </RegexExtractor>");
             line(jmx, "          <hashTree/>");
         }
+    }
+
+    private boolean isJmeterFunctionValue(String value) {
+        String text = Objects.toString(value, "").trim();
+        return text.startsWith("${__") && text.endsWith("}");
     }
 
     private void appendRawBodyArgument(StringBuilder jmx, String body) {
@@ -262,18 +271,25 @@ public class HarToJmxService {
         if (contentType == null) {
             return false;
         }
-        return contentType.toLowerCase(Locale.ROOT).contains("application/x-www-form-urlencoded");
+        return containsIgnoreCase(contentType, "application/x-www-form-urlencoded");
     }
 
     private List<NameValue> parsePairs(String text) {
         if (text == null || text.isBlank()) {
             return List.of();
         }
-        String[] pairs = text.split("&");
-        List<NameValue> out = new ArrayList<>(pairs.length);
-        for (String pair : pairs) {
-            String[] split = pair.split("=", 2);
-            out.add(new NameValue(split[0], split.length > 1 ? split[1] : ""));
+        List<NameValue> out = new ArrayList<>();
+        int start = 0;
+        while (start <= text.length()) {
+            int amp = text.indexOf('&', start);
+            int end = amp >= 0 ? amp : text.length();
+            String pair = text.substring(start, end);
+            int eq = pair.indexOf('=');
+            out.add(new NameValue(eq >= 0 ? pair.substring(0, eq) : pair, eq >= 0 ? pair.substring(eq + 1) : ""));
+            if (amp < 0) {
+                break;
+            }
+            start = amp + 1;
         }
         return out;
     }
@@ -331,7 +347,7 @@ public class HarToJmxService {
         int colon = hostPort.lastIndexOf(':');
         if (colon > 0 && colon + 1 < hostPort.length()) {
             String candidatePort = hostPort.substring(colon + 1);
-            if (DIGITS.matcher(candidatePort).matches()) {
+            if (isAsciiDigits(candidatePort)) {
                 domain = hostPort.substring(0, colon);
                 port = candidatePort;
             }
@@ -358,6 +374,28 @@ public class HarToJmxService {
     private String upper(String value, String fallback) {
         String text = Objects.toString(value, "").trim();
         return text.isBlank() ? fallback : text.toUpperCase(Locale.ROOT);
+    }
+
+    private boolean containsIgnoreCase(String text, String fragment) {
+        int max = text.length() - fragment.length();
+        for (int i = 0; i <= max; i++) {
+            if (text.regionMatches(true, i, fragment, 0, fragment.length())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isAsciiDigits(String value) {
+        if (value == null || value.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            if (!Character.isDigit(value.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String safeName(String name) {

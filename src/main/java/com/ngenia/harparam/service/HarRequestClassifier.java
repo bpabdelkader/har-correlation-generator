@@ -31,7 +31,8 @@ class HarRequestClassifier {
             "static.xx.fbcdn.net"
     );
     private static final Set<String> STATIC_EXTENSIONS = Set.of(
-            "js", "css", "png", "jpg", "jpeg", "gif", "svg", "ico", "woff", "woff2", "ttf", "map"
+            "js", "css", "png", "jpg", "jpeg", "webp", "gif", "svg", "ico",
+            "woff", "woff2", "ttf", "json", "mp4", "webm", "map"
     );
 
     Set<String> determineAllowedHostRoots(ArrayNode entries) {

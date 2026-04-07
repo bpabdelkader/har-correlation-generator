@@ -143,16 +143,69 @@ class SourceMatchFinder {
 
         if (text.contains(parameterName + "=" + value)
                 || text.contains(parameterName + "\\u003d" + value)
-                || text.contains("\"" + parameterName + "\":\"" + value + "\"")
-                || text.contains("\\\"" + parameterName + "\\\":\\\"" + value + "\\\"")) {
+                || matchesJsonField(text, parameterName, value, false)
+                || matchesJsonField(text, parameterName, value, true)) {
             return true;
         }
 
         String decoded = decode(text);
-        return !decoded.equals(text) && decoded.contains(parameterName + "=" + value);
+        return !decoded.equals(text)
+                && (decoded.contains(parameterName + "=" + value)
+                || matchesJsonField(decoded, parameterName, value, false));
+    }
+
+    private boolean matchesJsonField(String text, String parameterName, String value, boolean escapedQuotes) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        String quote = escapedQuotes ? "\\\"" : "\"";
+        String keyToken = quote + parameterName + quote;
+        int from = 0;
+        while (true) {
+            int keyStart = text.indexOf(keyToken, from);
+            if (keyStart < 0) {
+                return false;
+            }
+            int cursor = skipJsonWhitespace(text, keyStart + keyToken.length());
+            if (cursor >= text.length() || text.charAt(cursor) != ':') {
+                from = keyStart + 1;
+                continue;
+            }
+            cursor = skipJsonWhitespace(text, cursor + 1);
+            if (cursor >= text.length()) {
+                return false;
+            }
+            if (text.startsWith(quote, cursor)) {
+                int valueStart = cursor + quote.length();
+                int valueEnd = valueStart + value.length();
+                if (valueEnd + quote.length() <= text.length()
+                        && text.regionMatches(valueStart, value, 0, value.length())
+                        && text.startsWith(quote, valueEnd)) {
+                    return true;
+                }
+            } else if (text.regionMatches(cursor, value, 0, value.length())) {
+                return true;
+            }
+            from = keyStart + 1;
+        }
+    }
+
+    private int skipJsonWhitespace(String text, int index) {
+        int cursor = index;
+        while (cursor < text.length()) {
+            char current = text.charAt(cursor);
+            if (current != ' ' && current != '\t' && current != '\r' && current != '\n') {
+                break;
+            }
+            cursor++;
+        }
+        return cursor;
     }
 
     private String decode(String value) {
+        if (value == null || (value.indexOf('%') < 0 && value.indexOf('+') < 0)) {
+            return value;
+        }
         try {
             return URLDecoder.decode(value, StandardCharsets.UTF_8);
         } catch (Exception e) {

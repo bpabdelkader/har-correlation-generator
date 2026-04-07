@@ -607,58 +607,6 @@
 </head>
 <body>
 <div class="container">
-        <div
-                id="pathSuggestionModal"
-                class="suggestion-modal is-hidden"
-                th:if="${result.pathRewriteSuggestions != null and !result.pathRewriteSuggestions.isEmpty()}">
-            <div class="suggestion-panel">
-                <h2 class="suggestion-title">Suggested path replacements</h2>
-                <p class="suggestion-copy">
-                    These path values look dynamic, but they were not confirmed by the correlation script.
-                    Apply the checked suggestions only if you want them rewritten in the generated HAR.
-                </p>
-                <form method="post" action="/path-suggestions/apply">
-                    <div class="suggestion-list">
-                        <div class="suggestion-item" th:each="suggestion, iter : ${result.pathRewriteSuggestions}">
-                            <div class="suggestion-head">
-                                <input
-                                        class="suggestion-check"
-                                        type="checkbox"
-                                        name="suggestionIndexes"
-                                        th:value="${iter.index}"
-                                        checked>
-                                <div class="suggestion-label">
-                                    <div class="suggestion-name"
-                                         th:text="${'[T' + (suggestion.requestIndex < 10 ? '0' + suggestion.requestIndex : suggestion.requestIndex) + ']: ' + suggestion.requestName}"></div>
-                                    <div class="suggestion-meta">
-                                        <div class="url-line">
-                                            <div class="url-label">Value</div>
-                                            <div class="line-value" th:text="${suggestion.value}"></div>
-                                        </div>
-                                        <div class="url-line">
-                                            <div class="url-label">Proposed</div>
-                                            <div class="line-value" th:text="${'${' + suggestion.variableName + '}'}"></div>
-                                        </div>
-                                        <div class="url-line">
-                                            <div class="url-label">Current</div>
-                                            <div class="url-value" th:text="${suggestion.currentUrl}"></div>
-                                        </div>
-                                        <div class="url-line">
-                                            <div class="url-label">Replace</div>
-                                            <div class="url-value" th:text="${suggestion.proposedUrl}"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="suggestion-actions">
-                        <button type="button" id="dismissPathSuggestions" class="btn-secondary">Keep current HAR</button>
-                        <button type="submit">Apply selected replacements</button>
-                    </div>
-                </form>
-            </div>
-        </div>
         <div class="processed-layout">
             <div class="variables-sidebar">
                 <div class="download-har">
@@ -801,28 +749,6 @@
         </div>
 </div>
 <script>
-    (function () {
-        var modal = document.getElementById('pathSuggestionModal');
-        if (!modal) {
-            return;
-        }
-
-        modal.classList.remove('is-hidden');
-
-        var dismiss = document.getElementById('dismissPathSuggestions');
-        if (dismiss) {
-            dismiss.addEventListener('click', function () {
-                modal.classList.add('is-hidden');
-            });
-        }
-
-        modal.addEventListener('click', function (event) {
-            if (event.target === modal) {
-                modal.classList.add('is-hidden');
-            }
-        });
-    })();
-
     (function () {
         function parseTimestamp(raw) {
             var text = (raw || '').toString().trim();

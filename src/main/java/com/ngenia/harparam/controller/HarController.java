@@ -6,6 +6,7 @@ import com.ngenia.harparam.service.HarAnalysisService;
 import com.ngenia.harparam.service.HarToJmxService;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.constraints.NotNull;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -21,7 +22,6 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,15 +43,23 @@ public class HarController {
     private final HarAnalysisService harAnalysisService;
     private final HarToJmxService harToJmxService;
     private final ObjectMapper objectMapper;
+    private final String appVersion;
 
-    public HarController(HarAnalysisService harAnalysisService, HarToJmxService harToJmxService, ObjectMapper objectMapper) {
+    public HarController(
+            HarAnalysisService harAnalysisService,
+            HarToJmxService harToJmxService,
+            ObjectMapper objectMapper,
+            @Value("${app.version:dev}") String appVersion
+    ) {
         this.harAnalysisService = harAnalysisService;
         this.harToJmxService = harToJmxService;
         this.objectMapper = objectMapper;
+        this.appVersion = appVersion;
     }
 
     @GetMapping("/")
     public String index(Model model) {
+        model.addAttribute("appVersion", appVersion);
         return INDEX_VIEW;
     }
 
@@ -81,20 +89,8 @@ public class HarController {
             return "redirect:/";
         }
         model.addAttribute("result", result);
+        model.addAttribute("appVersion", appVersion);
         return "result";
-    }
-
-    @PostMapping("/path-suggestions/apply")
-    public String applyPathSuggestions(
-            @RequestParam(name = "suggestionIndexes", required = false) List<Integer> suggestionIndexes,
-            HttpSession session
-    ) throws Exception {
-        AnalysisResult result = requiredSessionAttribute(session, SESSION_ANALYSIS_RESULT, AnalysisResult.class, "No analysis result available.");
-        Collection<Integer> indexes = suggestionIndexes == null ? List.of() : suggestionIndexes;
-        AnalysisResult updated = harAnalysisService.applyPathRewriteSuggestions(result, indexes);
-        session.setAttribute(SESSION_ANALYSIS_RESULT, updated);
-        session.setAttribute(SESSION_MODIFIED_HAR, updated.modifiedHarJson().getBytes(StandardCharsets.UTF_8));
-        return "redirect:/result";
     }
 
     @GetMapping("/download/har")
