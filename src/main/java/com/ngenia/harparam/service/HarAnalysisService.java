@@ -25,10 +25,18 @@ import java.util.regex.Pattern;
 @Service
 public class HarAnalysisService {
 
+    private static final String ENTRIES = "entries";
+    private static final String REQUEST = "request";
+    private static final String METHOD = "method";
+    private static final String HEADERS = "headers";
+    private static final String POST_DATA = "postData";
+    private static final String QUERY_STRING = "queryString";
+    private static final String PARAMS = "params";
+    private static final String VALUE = "value";
     private static final String JMETER_TIME_NOW_FUNCTION = "${__time(,)}";
     private static final long MIN_REASONABLE_EPOCH_MS = 946684800000L;
     private static final long MAX_REASONABLE_EPOCH_MS = 4102444800000L;
-    private static final Pattern VAR_SAFE = Pattern.compile("[^a-zA-Z0-9_]");
+    private static final Pattern VAR_SAFE = Pattern.compile("\\W");
     private static final Pattern VAR_TOKEN = Pattern.compile("\\$\\{([^}]+)}");
     private static final Pattern UNDERSCORE_RUNS = Pattern.compile("_+");
     private static final Pattern NON_ALNUM_LOWER = Pattern.compile("[^a-z0-9]");
@@ -81,8 +89,8 @@ public class HarAnalysisService {
         }
         ObjectNode modifiedRoot = originalRoot.deepCopy();
 
-        JsonNode originalEntriesNode = originalRoot.path("log").path("entries");
-        JsonNode modifiedEntriesNode = modifiedRoot.path("log").path("entries");
+        JsonNode originalEntriesNode = originalRoot.path("log").path(ENTRIES);
+        JsonNode modifiedEntriesNode = modifiedRoot.path("log").path(ENTRIES);
         if (!(originalEntriesNode instanceof ArrayNode originalEntries) || !(modifiedEntriesNode instanceof ArrayNode modifiedEntries)) {
             throw new IllegalArgumentException("Invalid HAR structure: log.entries not found.");
         }
@@ -108,9 +116,9 @@ public class HarAnalysisService {
             JsonNode originalEntryNode = filteredEntries.originalEntries().get(i);
             JsonNode modifiedEntryNode = filteredEntries.modifiedEntries().get(i);
             if (originalEntryNode instanceof ObjectNode originalEntry && modifiedEntryNode instanceof ObjectNode modifiedEntry) {
-                JsonNode requestNode = modifiedEntry.path("request");
+                JsonNode requestNode = modifiedEntry.path(REQUEST);
                 if (requestNode instanceof ObjectNode request) {
-                    RequestRef sourceRequest = toRequestRef(i + 1, originalEntry.path("request"));
+                    RequestRef sourceRequest = toRequestRef(i + 1, originalEntry.path(REQUEST));
                     rewriteUrlPathValues(i + 1, sourceRequest.name(), sourceRequest.url(), request, rewriteContext);
                     rewriteQueryValues(request, rewriteContext);
                     rewriteBodyValues(request, rewriteContext);
@@ -166,8 +174,8 @@ public class HarAnalysisService {
             int globalIndex = i + 1;
             JsonNode originalEntryNode = originalEntries.get(i);
             JsonNode modifiedEntryNode = modifiedEntries.get(i);
-            JsonNode originalRequestNode = originalEntryNode.path("request");
-            JsonNode modifiedRequestNode = modifiedEntryNode.path("request");
+            JsonNode originalRequestNode = originalEntryNode.path(REQUEST);
+            JsonNode modifiedRequestNode = modifiedEntryNode.path(REQUEST);
             if (!(originalRequestNode instanceof ObjectNode originalRequest) || !(modifiedRequestNode instanceof ObjectNode modifiedRequest)) {
                 continue;
             }
@@ -175,16 +183,16 @@ public class HarAnalysisService {
                 continue;
             }
 
-            String method = modifiedRequest.path("method").asText("");
+            String method = modifiedRequest.path(METHOD).asText("");
             String rewrittenUrl = modifiedRequest.path("url").asText("");
             String originalUrl = originalRequest.path("url").asText("");
             String name = deriveRequestName(originalUrl);
             String startedDateTime = originalEntryNode.path("startedDateTime").asText("");
 
-            Map<String, String> originalHeaders = extractHeaders(originalRequest.path("headers"));
-            Map<String, String> rewrittenHeaders = extractHeaders(modifiedRequest.path("headers"));
-            String originalBody = originalRequest.path("postData").path("text").asText("");
-            String rewrittenBody = modifiedRequest.path("postData").path("text").asText("");
+            Map<String, String> originalHeaders = extractHeaders(originalRequest.path(HEADERS));
+            Map<String, String> rewrittenHeaders = extractHeaders(modifiedRequest.path(HEADERS));
+            String originalBody = originalRequest.path(POST_DATA).path("text").asText("");
+            String rewrittenBody = modifiedRequest.path(POST_DATA).path("text").asText("");
             String sourceVariableName = null;
             SourceMatch sourceMatch = null;
             RequestRef sourceRef = null;
@@ -253,7 +261,7 @@ public class HarAnalysisService {
         for (int i = 0; i < count; i++) {
             int globalIndex = i + 1;
             JsonNode originalEntryNode = originalEntries.get(i);
-            JsonNode originalRequestNode = originalEntryNode.path("request");
+            JsonNode originalRequestNode = originalEntryNode.path(REQUEST);
             if (!(originalRequestNode instanceof ObjectNode originalRequest)) {
                 continue;
             }
@@ -292,14 +300,14 @@ public class HarAnalysisService {
                 continue;
             }
 
-            String method = originalRequest.path("method").asText("");
+            String method = originalRequest.path(METHOD).asText("");
             String url = originalRequest.path("url").asText("");
             String name = deriveRequestName(url);
-            String body = originalRequest.path("postData").path("text").asText("");
+            String body = originalRequest.path(POST_DATA).path("text").asText("");
             String startedDateTime = originalEntryNode.path("startedDateTime").asText("");
             SourceMetadata sourceMetadata = sourceMetadataByIndex.get(globalIndex);
             String kind = sourceMetadata != null ? "SOURCE" : "PLAIN";
-            Map<String, String> headers = extractHeaders(originalRequest.path("headers"));
+            Map<String, String> headers = extractHeaders(originalRequest.path(HEADERS));
             requests.add(new RewrittenRequest(
                     globalIndex,
                     kind,
@@ -352,7 +360,7 @@ public class HarAnalysisService {
         if (headersNode instanceof ArrayNode headerArray) {
             for (JsonNode headerNode : headerArray) {
                 String headerName = headerNode.path("name").asText("");
-                String headerValue = headerNode.path("value").asText("");
+                String headerValue = headerNode.path(VALUE).asText("");
                 if (!headerName.isBlank() && !headerValue.isBlank()) {
                     headers.put(headerName, headerValue);
                 }
@@ -364,12 +372,12 @@ public class HarAnalysisService {
     private Set<String> extractVariableNamesFromRequestArguments(ObjectNode request) {
         Set<String> names = new LinkedHashSet<>();
 
-        collectVariableNamesFromParameters(request.path("queryString"), names);
+        collectVariableNamesFromParameters(request.path(QUERY_STRING), names);
         collectVariableNames(request.path("url").asText(""), names);
 
         JsonNode postDataNode = request.path("postData");
         if (postDataNode instanceof ObjectNode postData) {
-            collectVariableNamesFromParameters(postData.path("params"), names);
+            collectVariableNamesFromParameters(postData.path(PARAMS), names);
             collectVariableNames(postData.path("text").asText(""), names);
         }
 
@@ -399,7 +407,7 @@ public class HarAnalysisService {
     }
 
     private boolean containsVariableizedArgument(ObjectNode request) {
-        if (containsVariableTokenInParameters(request.path("queryString"))) {
+        if (containsVariableTokenInParameters(request.path(QUERY_STRING))) {
             return true;
         }
         if (containsVariableToken(request.path("url").asText(""))) {
@@ -408,7 +416,7 @@ public class HarAnalysisService {
 
         JsonNode postDataNode = request.path("postData");
         if (postDataNode instanceof ObjectNode postData) {
-            if (containsVariableTokenInParameters(postData.path("params"))) {
+            if (containsVariableTokenInParameters(postData.path(PARAMS))) {
                 return true;
             }
             return containsVariableToken(postData.path("text").asText(""));
@@ -439,20 +447,11 @@ public class HarAnalysisService {
 
         String prefix = base.substring(0, pathStart);
         String path = base.substring(pathStart);
-        String rewrittenPath = rewritePathSegments(requestIndex, requestName, originalUrl, prefix, path, query, fragment, context);
+        String rewrittenPath = rewritePathSegments(path, context);
         request.put("url", prefix + rewrittenPath + query + fragment);
     }
 
-    private String rewritePathSegments(
-            int requestIndex,
-            String requestName,
-            String originalUrl,
-            String urlPrefix,
-            String path,
-            String query,
-            String fragment,
-            RewriteContext context
-    ) {
+    private String rewritePathSegments(String path, RewriteContext context) {
         String[] segments = path.split("/", -1);
         String previousLiteralSegment = null;
         for (int i = 0; i < segments.length; i++) {
@@ -567,7 +566,7 @@ public class HarAnalysisService {
     }
 
     private void rewriteQueryValues(ObjectNode request, RewriteContext context) {
-        rewriteParameterArray(request.path("queryString"), "query_param", context);
+        rewriteParameterArray(request.path(QUERY_STRING), "query_param", context);
 
         String url = request.path("url").asText("");
         if (url.isBlank()) {
@@ -589,12 +588,12 @@ public class HarAnalysisService {
     }
 
     private void rewriteBodyValues(ObjectNode request, RewriteContext context) {
-        JsonNode postDataNode = request.path("postData");
+        JsonNode postDataNode = request.path(POST_DATA);
         if (!(postDataNode instanceof ObjectNode postData)) {
             return;
         }
 
-        rewriteParameterArray(postData.path("params"), "body_param", context);
+        rewriteParameterArray(postData.path(PARAMS), "body_param", context);
 
         String text = postData.path("text").asText("");
         if (text.isBlank()) {
@@ -721,16 +720,15 @@ public class HarAnalysisService {
             return;
         }
         for (JsonNode paramNode : params) {
-            if (!(paramNode instanceof ObjectNode param)) {
-                continue;
-            }
-            String replacement = resolveVariableName(
-                    param.path("name").asText(fallbackName),
-                    param.path("value").asText(""),
-                    context
-            );
-            if (replacement != null) {
-                param.put("value", replacementValue(replacement));
+            if (paramNode instanceof ObjectNode param) {
+                String replacement = resolveVariableName(
+                        param.path("name").asText(fallbackName),
+                        param.path(VALUE).asText(""),
+                        context
+                );
+                if (replacement != null) {
+                    param.put(VALUE, replacementValue(replacement));
+                }
             }
         }
     }
@@ -740,7 +738,7 @@ public class HarAnalysisService {
             return;
         }
         for (JsonNode paramNode : params) {
-            collectVariableNames(paramNode.path("value").asText(""), names);
+            collectVariableNames(paramNode.path(VALUE).asText(""), names);
         }
     }
 
@@ -749,24 +747,11 @@ public class HarAnalysisService {
             return false;
         }
         for (JsonNode paramNode : params) {
-            if (containsVariableToken(paramNode.path("value").asText(""))) {
+            if (containsVariableToken(paramNode.path(VALUE).asText(""))) {
                 return true;
             }
         }
         return false;
-    }
-
-    private String extractQueryPart(String url) {
-        int queryStart = url.indexOf('?');
-        if (queryStart < 0) {
-            return url;
-        }
-
-        int fragmentStart = url.indexOf('#', queryStart + 1);
-        if (fragmentStart < 0) {
-            return url.substring(queryStart + 1);
-        }
-        return url.substring(queryStart + 1, fragmentStart);
     }
 
     private String resolveVariableName(String parameterName, String value, RewriteContext context) {
@@ -1062,15 +1047,12 @@ public class HarAnalysisService {
         for (int i = 0; i < count; i++) {
             JsonNode originalEntryNode = originalEntries.get(i);
             JsonNode modifiedEntryNode = modifiedEntries.get(i);
-            JsonNode originalRequestNode = originalEntryNode.path("request");
-            if (!(originalRequestNode instanceof ObjectNode originalRequest)) {
-                continue;
+            JsonNode originalRequestNode = originalEntryNode.path(REQUEST);
+            if (originalRequestNode instanceof ObjectNode originalRequest
+                    && requestClassifier.isBusinessRequest(originalRequest, originalEntryNode.path("response"), allowedHostRoots)) {
+                filteredOriginalEntries.add(originalEntryNode);
+                filteredModifiedEntries.add(modifiedEntryNode);
             }
-            if (!requestClassifier.isBusinessRequest(originalRequest, originalEntryNode.path("response"), allowedHostRoots)) {
-                continue;
-            }
-            filteredOriginalEntries.add(originalEntryNode);
-            filteredModifiedEntries.add(modifiedEntryNode);
         }
 
         return new FilteredEntries(filteredOriginalEntries, filteredModifiedEntries);
@@ -1079,7 +1061,7 @@ public class HarAnalysisService {
     private void replaceEntries(ObjectNode root, ArrayNode entries) {
         JsonNode logNode = root.path("log");
         if (logNode instanceof ObjectNode logObject) {
-            logObject.set("entries", entries);
+            logObject.set(ENTRIES, entries);
         }
     }
 

@@ -134,24 +134,24 @@ class SourceMatchFinder {
             }
             return null;
         }
-    }
 
-    private boolean containsNamedOccurrence(String text, String parameterName, String value) {
-        if (text == null || text.isBlank() || parameterName == null || parameterName.isBlank() || value == null || value.isBlank()) {
-            return false;
+        private boolean containsNamedOccurrence(String text, String parameterName, String value) {
+            if (text == null || text.isBlank() || parameterName == null || parameterName.isBlank() || value == null || value.isBlank()) {
+                return false;
+            }
+
+            if (text.contains(parameterName + "=" + value)
+                    || text.contains(parameterName + "\\u003d" + value)
+                    || matchesJsonField(text, parameterName, value, false)
+                    || matchesJsonField(text, parameterName, value, true)) {
+                return true;
+            }
+
+            String decoded = decode(text);
+            return !decoded.equals(text)
+                    && (decoded.contains(parameterName + "=" + value)
+                    || matchesJsonField(decoded, parameterName, value, false));
         }
-
-        if (text.contains(parameterName + "=" + value)
-                || text.contains(parameterName + "\\u003d" + value)
-                || matchesJsonField(text, parameterName, value, false)
-                || matchesJsonField(text, parameterName, value, true)) {
-            return true;
-        }
-
-        String decoded = decode(text);
-        return !decoded.equals(text)
-                && (decoded.contains(parameterName + "=" + value)
-                || matchesJsonField(decoded, parameterName, value, false));
     }
 
     private boolean matchesJsonField(String text, String parameterName, String value, boolean escapedQuotes) {

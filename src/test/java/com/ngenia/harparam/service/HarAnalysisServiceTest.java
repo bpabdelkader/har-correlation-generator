@@ -8,7 +8,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import java.io.InputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * @author bpabdelkader
@@ -29,7 +29,7 @@ class HarAnalysisServiceTest {
 
     private AnalysisResult analyze(String resourceName) throws Exception {
         InputStream input = HarAnalysisServiceTest.class.getClassLoader().getResourceAsStream(resourceName);
-        assertTrue(input != null, "Missing test HAR resource: " + resourceName);
+        assertNotNull(input, "Missing test HAR resource: " + resourceName);
 
         HarAnalysisService service = new HarAnalysisService(new ObjectMapper());
         MockMultipartFile harFile = new MockMultipartFile(

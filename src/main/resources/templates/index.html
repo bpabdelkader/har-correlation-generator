@@ -64,7 +64,7 @@
             border-radius: 999px;
             padding: 4px 10px;
             background: rgba(76, 137, 199, 0.12);
-            color: rgb(182, 173, 86);
+            color: #f3df8f;
             font-size: 0.78rem;
             font-weight: 700;
             letter-spacing: 0.08em;
@@ -140,7 +140,7 @@
             font-weight: 700;
             letter-spacing: 0.08em;
             text-transform: uppercase;
-            color: rgb(182, 173, 86);
+            color: #f3df8f;
         }
         input[type=file] {
             width: 100%;
@@ -201,6 +201,9 @@
             background: rgba(199, 84, 80, 0.1);
             padding: 10px 12px;
         }
+        .error[hidden] {
+            display: none;
+        }
         @media (max-width: 920px) {
             .hero {
                 grid-template-columns: 1fr;
@@ -240,9 +243,20 @@
             <h2>Start a new analysis</h2>
             <p>Select a `.har` or `.json` capture file to process it through the correlation generator.</p>
 
-            <div class="error" th:if="${error}" th:text="${error}"></div>
+            <div
+                id="uploadError"
+                class="error"
+                th:hidden="${error == null}"
+                th:text="${error}"
+            ></div>
 
-            <form method="post" enctype="multipart/form-data" action="/analyze">
+            <form
+                id="uploadForm"
+                method="post"
+                enctype="multipart/form-data"
+                action="/analyze"
+                th:attr="data-max-upload-bytes=${maxUploadBytes},data-max-upload-label=${maxFileSize}"
+            >
                 <div class="file-field">
                     <label for="harFile">HAR file</label>
                     <input id="harFile" type="file" name="harFile" accept=".har,.json" required>
@@ -257,5 +271,57 @@
     </div>
     <div class="page-version" th:text="${'Version ' + appVersion}">Version dev</div>
 </div>
+<script>
+    (() => {
+        const form = document.getElementById('uploadForm');
+        const fileInput = document.getElementById('harFile');
+        const errorBox = document.getElementById('uploadError');
+
+        if (!form || !fileInput || !errorBox) {
+            return;
+        }
+
+        const maxUploadBytes = Number(form.dataset.maxUploadBytes);
+        const maxUploadLabel = form.dataset.maxUploadLabel || 'the configured limit';
+
+        const showError = (message) => {
+            errorBox.textContent = message;
+            errorBox.hidden = false;
+        };
+
+        const clearError = () => {
+            errorBox.hidden = true;
+            errorBox.textContent = '';
+        };
+
+        const validateSelectedFile = () => {
+            const file = fileInput.files && fileInput.files[0];
+            if (!file) {
+                clearError();
+                return true;
+            }
+
+            if (Number.isFinite(maxUploadBytes) && maxUploadBytes > 0 && file.size > maxUploadBytes) {
+                showError(`The HAR file exceeds the maximum allowed size of ${maxUploadLabel}.`);
+                return false;
+            }
+
+            clearError();
+            return true;
+        };
+
+        fileInput.addEventListener('change', () => {
+            if (!validateSelectedFile()) {
+                fileInput.value = '';
+            }
+        });
+
+        form.addEventListener('submit', (event) => {
+            if (!validateSelectedFile()) {
+                event.preventDefault();
+            }
+        });
+    })();
+</script>
 </body>
 </html>

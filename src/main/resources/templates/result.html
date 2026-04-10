@@ -227,7 +227,7 @@
             background: rgba(76, 137, 199, 0.12);
             font-weight: 700;
             white-space: nowrap;
-            color: rgb(182 173 86);;
+            color: #f3df8f;
         }
         .transaction-content {
             padding: 10px;
@@ -302,7 +302,7 @@
         }
         .version-label {
             font-weight: 700;
-            color: rgb(182 173 86);;
+            color: #f3df8f;
             padding-left: 2px;
         }
         .url-line {
@@ -367,7 +367,7 @@
         }
         .small {
             font-size: 0.86rem;
-            color: var(--text-dim);
+            color: #c8cfd7;
         }
         .source-sub {
             margin-top: 0;
@@ -486,7 +486,7 @@
         .filter-meta {
             justify-self: end;
             font-size: 0.9rem;
-            color: var(--text-dim);
+            color: #c8cfd7;
             font-weight: 700;
             white-space: nowrap;
         }
@@ -523,7 +523,7 @@
                     rgba(255, 214, 102, 0.14) 12px
             ) !important;
             border-color: rgba(255, 214, 102, 0.58) !important;
-            color: #fff1bf !important;
+            color: #fff8dd !important;
         }
         .suggestion-modal {
             position: fixed;
@@ -753,10 +753,10 @@
         function parseTimestamp(raw) {
             var text = (raw || '').toString().trim();
             if (!text) {
-                return NaN;
+                return Number.NaN;
             }
             var value = Date.parse(text);
-            return Number.isFinite(value) ? value : NaN;
+            return Number.isFinite(value) ? value : Number.NaN;
         }
 
         function pad2(value) {
@@ -769,10 +769,10 @@
                 return 'Home';
             }
 
-            text = text.replace(/[_\s]+/g, '-');
-            text = text.replace(/[^A-Za-z0-9-]+/g, '-');
-            text = text.replace(/-+/g, '-');
-            text = text.replace(/^-|-$/g, '');
+            text = text.replaceAll(/[_\s]+/g, '-');
+            text = text.replaceAll(/[^A-Za-z0-9-]+/g, '-');
+            text = text.replaceAll(/-+/g, '-');
+            text = text.replaceAll(/^-|-$/g, '');
             if (!text) {
                 return 'Home';
             }
@@ -781,7 +781,7 @@
         }
 
         function transactionTitleFor(wrap, fallbackIndex) {
-            var reqName = (wrap.getAttribute('data-request-name') || '').trim();
+            var reqName = (wrap.dataset.requestName || '').trim();
             var label = normalizeTransactionLabel(reqName);
             return 'SC01_' + pad2(fallbackIndex) + '-' + label;
         }
@@ -831,10 +831,10 @@
 
             var groups = [];
             var currentGroup = [];
-            var previousTs = NaN;
+            var previousTs = Number.NaN;
 
             wraps.forEach(function (wrap) {
-                var ts = parseTimestamp(wrap.getAttribute('data-started-at'));
+                var ts = parseTimestamp(wrap.dataset.startedAt);
                 var shouldStartNew = !currentGroup.length;
                 if (!shouldStartNew) {
                     if (!Number.isFinite(ts) || !Number.isFinite(previousTs)) {
@@ -893,9 +893,9 @@
         function applySourceColors() {
             var wraps = document.querySelectorAll('.request-wrap');
             wraps.forEach(function (wrap) {
-                var kind = (wrap.getAttribute('data-kind') || '').trim();
-                var index = (wrap.getAttribute('data-index') || '').trim();
-                var sourceIndex = (wrap.getAttribute('data-source-index') || '').trim();
+                var kind = (wrap.dataset.kind || '').trim();
+                var index = (wrap.dataset.index || '').trim();
+                var sourceIndex = (wrap.dataset.sourceIndex || '').trim();
 
                 var sourceId = '';
                 if (kind === 'SOURCE' && index) {
@@ -916,11 +916,11 @@
 
         function escapeHtml(str) {
             return str
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/\"/g, "&quot;")
-                .replace(/'/g, "&#39;");
+                .replaceAll(/&/g, "&amp;")
+                .replaceAll(/</g, "&lt;")
+                .replaceAll(/>/g, "&gt;")
+                .replaceAll(/"/g, "&quot;")
+                .replaceAll(/'/g, "&#39;");
         }
 
         function highlightVars(text) {
@@ -932,7 +932,93 @@
         }
 
         function escapeRegExp(str) {
-            return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return str.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+        }
+
+        function isWordChar(ch) {
+            return !!ch && /\w/.test(ch);
+        }
+
+        function scanParamAssignments(text, onPair) {
+            var raw = (text || '').toString();
+            var index = 0;
+
+            while (index < raw.length) {
+                while (index < raw.length && (raw.charAt(index) === '&' || /\s/.test(raw.charAt(index)))) {
+                    index++;
+                }
+                if (index >= raw.length) {
+                    return;
+                }
+
+                var nameStart = index;
+                while (index < raw.length && isWordChar(raw.charAt(index))) {
+                    index++;
+                }
+                if (index === nameStart || raw.charAt(index) !== '=') {
+                    index = raw.indexOf('&', index);
+                    if (index < 0) {
+                        return;
+                    }
+                    index++;
+                    continue;
+                }
+
+                var valueStart = ++index;
+                while (index < raw.length && raw.charAt(index) !== '&' && raw.charAt(index) !== '#' && !/\s/.test(raw.charAt(index))) {
+                    index++;
+                }
+
+                onPair({
+                    name: raw.slice(nameStart, valueStart - 1),
+                    value: raw.slice(valueStart, index),
+                    valueStart: valueStart,
+                    valueEnd: index
+                });
+            }
+        }
+
+        function scanVariableAssignments(text, onPair) {
+            scanParamAssignments(text, function (pair) {
+                if (pair.value.startsWith('${') && pair.value.endsWith('}') && pair.value.length > 3) {
+                    onPair({
+                        name: pair.name,
+                        variableName: pair.value.slice(2, -1)
+                    });
+                }
+            });
+        }
+
+        function splitVariableTemplate(text) {
+            var raw = (text || '').toString();
+            var tokens = [];
+            var cursor = 0;
+
+            while (cursor < raw.length) {
+                var start = raw.indexOf('${', cursor);
+                if (start < 0) {
+                    tokens.push({ type: 'text', value: raw.slice(cursor) });
+                    return tokens;
+                }
+                if (start > cursor) {
+                    tokens.push({ type: 'text', value: raw.slice(cursor, start) });
+                }
+                var end = raw.indexOf('}', start + 2);
+                if (end < 0) {
+                    tokens.push({ type: 'text', value: raw.slice(start) });
+                    return tokens;
+                }
+
+                var variableName = raw.slice(start + 2, end);
+                if (variableName) {
+                    tokens.push({ type: 'variable', value: variableName });
+                } else {
+                    tokens.push({ type: 'text', value: raw.slice(start, end + 1) });
+                }
+                cursor = end + 1;
+            }
+
+            return tokens;
         }
 
         function highlightVariableValues(text, variables) {
@@ -1006,41 +1092,30 @@
         function highlightParamValuesFromAfter(beforeText, afterText) {
             var beforeRaw = (beforeText || '').toString();
             var afterRaw = (afterText || '').toString();
-            if (!beforeRaw || !afterRaw || afterRaw.indexOf('${') === -1) {
+            if (!beforeRaw || !afterRaw || !afterRaw.includes('${')) {
                 return null;
             }
 
             var variableByParam = new Map();
-            var afterRegex = /([A-Za-z0-9_]+)=\$\{([^}]+)}/g;
-            var match;
-            while ((match = afterRegex.exec(afterRaw)) !== null) {
-                variableByParam.set(match[1], match[2]);
-            }
+            scanVariableAssignments(afterRaw, function (pair) {
+                variableByParam.set(pair.name, pair.variableName);
+            });
             if (!variableByParam.size) {
                 return null;
             }
 
             var matches = [];
-            var beforeRegex = /([A-Za-z0-9_]+)=([^&#\s]+)/g;
-            while ((match = beforeRegex.exec(beforeRaw)) !== null) {
-                var paramName = match[1];
-                var variableName = variableByParam.get(paramName);
-                var value = match[2];
-                if (!variableName || !value) {
-                    continue;
+            scanParamAssignments(beforeRaw, function (pair) {
+                var variableName = variableByParam.get(pair.name);
+                if (variableName && pair.value) {
+                    matches.push({
+                        start: pair.valueStart,
+                        end: pair.valueEnd,
+                        name: variableName,
+                        value: pair.value
+                    });
                 }
-                var valueOffset = match[0].indexOf(value);
-                if (valueOffset < 0) {
-                    continue;
-                }
-                var start = match.index + valueOffset;
-                matches.push({
-                    start: start,
-                    end: start + value.length,
-                    name: variableName,
-                    value: value
-                });
-            }
+            });
 
             if (!matches.length) {
                 return null;
@@ -1052,72 +1127,75 @@
         function deriveVariableValuesFromPair(beforeText, afterText) {
             var beforeRaw = (beforeText || '').toString();
             var afterRaw = (afterText || '').toString();
-            if (!beforeRaw || !afterRaw || afterRaw.indexOf('${') === -1) {
+            if (!beforeRaw || !afterRaw || !afterRaw.includes('${')) {
                 return [];
             }
 
-            var names = [];
-            var pattern = '^';
-            var lastIndex = 0;
-            var regex = /\$\{([^}]+)}/g;
-            var match;
+            var tokens = splitVariableTemplate(afterRaw);
+            var values = [];
+            var beforeIndex = 0;
 
-            while ((match = regex.exec(afterRaw)) !== null) {
-                pattern += escapeRegExp(afterRaw.slice(lastIndex, match.index));
-                pattern += '([\\s\\S]+?)';
-                names.push(match[1]);
-                lastIndex = match.index + match[0].length;
-            }
+            for (var tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
+                var token = tokens[tokenIndex];
+                if (token.type === 'text') {
+                    if (beforeRaw.slice(beforeIndex, beforeIndex + token.value.length) !== token.value) {
+                        return [];
+                    }
+                    beforeIndex += token.value.length;
+                    continue;
+                }
 
-            pattern += escapeRegExp(afterRaw.slice(lastIndex));
-            pattern += '$';
+                var nextLiteral = '';
+                for (var i = tokenIndex + 1; i < tokens.length; i++) {
+                    if (tokens[i].type === 'text' && tokens[i].value) {
+                        nextLiteral = tokens[i].value;
+                        break;
+                    }
+                }
 
-            try {
-                var compiled = new RegExp(pattern);
-                var result = compiled.exec(beforeRaw);
-                if (!result) {
+                var valueEnd = nextLiteral ? beforeRaw.indexOf(nextLiteral, beforeIndex) : beforeRaw.length;
+                if (valueEnd < beforeIndex) {
                     return [];
                 }
-                return names.map(function (name, index) {
-                    return {
-                        name: name,
-                        value: result[index + 1] || ''
-                    };
-                }).filter(function (entry) {
-                    return entry.name && entry.value;
+
+                values.push({
+                    name: token.value,
+                    value: beforeRaw.slice(beforeIndex, valueEnd)
                 });
-            } catch (e) {
+                beforeIndex = valueEnd;
+            }
+
+            if (beforeIndex !== beforeRaw.length) {
                 return [];
             }
+
+            return values.filter(function (entry) {
+                return entry.name && entry.value;
+            });
         }
 
         function extractParamVariablePairs(beforeText, afterText) {
             var beforeRaw = (beforeText || '').toString();
             var afterRaw = (afterText || '').toString();
-            if (!beforeRaw || !afterRaw || afterRaw.indexOf('${') === -1) {
+            if (!beforeRaw || !afterRaw || !afterRaw.includes('${')) {
                 return [];
             }
 
             var beforePairs = new Map();
-            var pairRegex = /([A-Za-z0-9_]+)=([^&#\s]+)/g;
-            var match;
-            while ((match = pairRegex.exec(beforeRaw)) !== null) {
-                beforePairs.set(match[1], match[2]);
-            }
+            scanParamAssignments(beforeRaw, function (pair) {
+                beforePairs.set(pair.name, pair.value);
+            });
 
             var out = [];
-            var afterRegex = /([A-Za-z0-9_]+)=\$\{([^}]+)}/g;
-            while ((match = afterRegex.exec(afterRaw)) !== null) {
-                var paramName = match[1];
-                var variableName = match[2];
-                var value = beforePairs.get(paramName);
-                if (paramName && variableName && value) {
+            scanVariableAssignments(afterRaw, function (pair) {
+                var value = beforePairs.get(pair.name);
+                if (pair.name && pair.variableName && value) {
                     out.push({
-                        name: variableName,
+                        name: pair.variableName,
                         value: value
                     });
                 }
-            }
+            });
 
             return out;
         }
@@ -1128,7 +1206,7 @@
             // Variables listed under a SOURCE block define the extraction lot (its request index).
             var sourceWraps = document.querySelectorAll('.request-wrap[data-index]');
             sourceWraps.forEach(function (wrap) {
-                var lotId = (wrap.getAttribute('data-index') || '').trim();
+                var lotId = (wrap.dataset.index || '').trim();
                 if (!lotId) {
                     return;
                 }
@@ -1138,7 +1216,7 @@
                 }
                 var lotColor = paletteForLot(lotId);
                 tags.forEach(function (tag) {
-                    var varName = (tag.getAttribute('data-var-name') || '').trim();
+                    var varName = (tag.dataset.varName || '').trim();
                     if (!varName) {
                         return;
                     }
@@ -1152,7 +1230,7 @@
             // Ensure each ${variable} uses the color of its extraction lot.
             var chips = document.querySelectorAll('.var-chip[data-var-name]');
             chips.forEach(function (chip) {
-                var varName = (chip.getAttribute('data-var-name') || '').trim();
+                var varName = (chip.dataset.varName || '').trim();
                 var lotColor = lotByVariable.get(varName);
                 if (!lotColor) {
                     return;
@@ -1173,7 +1251,7 @@
         modifiedWraps.forEach(function (wrap) {
             var usedVariableNames = new Set(
                 Array.prototype.slice.call(wrap.querySelectorAll('.after-version .var-chip[data-var-name]')).map(function (chip) {
-                    return (chip.getAttribute('data-var-name') || '').trim();
+                    return (chip.dataset.varName || '').trim();
                 }).filter(function (name) {
                     return !!name;
                 })
@@ -1183,8 +1261,8 @@
 
             Array.prototype.slice.call(wrap.querySelectorAll('.source-sub .var-tag[data-var-name][data-var-value]')).map(function (tag) {
                 return {
-                    name: (tag.getAttribute('data-var-name') || '').trim(),
-                    value: tag.getAttribute('data-var-value') || ''
+                    name: (tag.dataset.varName || '').trim(),
+                    value: tag.dataset.varValue || ''
                 };
             }).filter(function (entry) {
                 return entry.name && entry.value && usedVariableNames.has(entry.name);
@@ -1242,7 +1320,7 @@
         }
 
         function stripVarTokens(text) {
-            return (text || "").toString().replace(/\$\{[^}]+}/g, "");
+            return (text || "").toString().replaceAll(/\$\{[^}]+}/g, "");
         }
 
         function hostFromUrl(raw) {
@@ -1250,21 +1328,16 @@
             if (!text) {
                 return "";
             }
-            try {
-                var u = new URL(text);
-                return (u.host || "").toLowerCase();
-            } catch (e) {
-                var m = text.match(/^https?:\/\/([^\/]+)/i);
-                return m ? (m[1] || "").toLowerCase() : "";
-            }
+            var match = text.match(/^https?:\/\/([^/]+)/i);
+            return match ? (match[1] || "").toLowerCase() : "";
         }
 
         function collectWrapData(wrap) {
-            var kind = (wrap.getAttribute('data-kind') || '').trim();
+            var kind = (wrap.dataset.kind || '').trim();
             var urlNodes = wrap.querySelectorAll('.url-value');
             var host = '';
-            for (var i = 0; i < urlNodes.length; i++) {
-                var h = hostFromUrl(urlNodes[i].textContent || '');
+            for (var node of urlNodes) {
+                var h = hostFromUrl(node.textContent || '');
                 if (h) {
                     host = h;
                     break;
@@ -1273,7 +1346,7 @@
 
             var vars = new Set();
             wrap.querySelectorAll('[data-var-name]').forEach(function (node) {
-                var name = (node.getAttribute('data-var-name') || '').trim();
+                var name = (node.dataset.varName || '').trim();
                 if (name) {
                     vars.add(name.toLowerCase());
                 }
@@ -1334,8 +1407,8 @@
 
             if (varNodes && varNodes.length) {
                 varNodes.forEach(function (node) {
-                    var name = (node.getAttribute('data-var-name') || '').toString().trim().toLowerCase();
-                    if (q && name && name.indexOf(q) !== -1) {
+                    var name = (node.dataset.varName || '').toString().trim().toLowerCase();
+                    if (q && name && name.includes(q)) {
                         node.classList.add('var-match');
                     } else {
                         node.classList.remove('var-match');
@@ -1349,10 +1422,8 @@
             var varQ = normalize(state.varQuery);
             var domainQ = normalize(state.domainQuery);
             var kindQ = (state.kindQuery || '').trim();
-
-            
             applyHighlights(varQ, variableRows, varNodes);
-var total = wraps.length;
+            var total = wraps.length;
             var shown = 0;
 
             wraps.forEach(function (wrap) {
@@ -1368,12 +1439,12 @@ var total = wraps.length;
                     }
                 }
                 if (ok && domainQ) {
-                    ok = data.host && data.host.indexOf(domainQ) !== -1;
+                    ok = data.host && data.host.includes(domainQ);
                 }
                 if (ok && varQ) {
                     var has = false;
                     data.vars.forEach(function (v) {
-                        if (!has && v.indexOf(varQ) !== -1) {
+                        if (!has && v.includes(varQ)) {
                             has = true;
                         }
                     });
@@ -1402,7 +1473,7 @@ var total = wraps.length;
                 variableRows.forEach(function (row) {
                     var key = row.querySelector('.variable-key');
                     var name = normalize(key ? key.textContent : '');
-                    if (!varQ || (name && name.indexOf(varQ) !== -1)) {
+                    if (!varQ || (name && name.includes(varQ))) {
                         row.classList.remove('is-hidden');
                     } else {
                         row.classList.add('is-hidden');
@@ -1432,10 +1503,8 @@ var total = wraps.length;
         });
 
         var variableRows = Array.prototype.slice.call(document.querySelectorAll('.variables-stack .variable-row'));
-
-        
         var varNodes = Array.prototype.slice.call(document.querySelectorAll('[data-var-name]'));
-function readState() {
+        function readState() {
             return {
                 varQuery: filterVar.value,
                 domainQuery: filterDomain.value,

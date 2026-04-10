@@ -18,10 +18,12 @@ import java.util.regex.Pattern;
 @Service
 public class HarToJmxService {
 
+    private static final String HTTPS_PROTOCOL = "https";
+    private static final String ROOT_PATH = "/";
     private static final Pattern LABEL_SPACES = Pattern.compile("[_\\s]+");
     private static final Pattern LABEL_NON_ALNUM = Pattern.compile("[^A-Za-z0-9-]+");
     private static final Pattern LABEL_DASH_RUNS = Pattern.compile("-+");
-    private static final Pattern LABEL_EDGE_DASHES = Pattern.compile("^-|-$");
+    private static final Pattern LABEL_EDGE_DASHES = Pattern.compile("(^-)|(-$)");
 
     public String toJmx(List<RewrittenRequest> requests, Map<String, String> variables, Map<String, String> regexByVariable) {
         StringBuilder jmx = new StringBuilder(32_768);
@@ -306,17 +308,16 @@ public class HarToJmxService {
     private UrlParts parseUrl(String rawUrl) {
         String url = Objects.toString(rawUrl, "").trim();
         if (url.isBlank()) {
-            return new UrlParts("https", "", "", "/", "", "/");
+            return new UrlParts(HTTPS_PROTOCOL, "", "", ROOT_PATH, "", ROOT_PATH);
         }
 
-        String protocol = "https";
+        String protocol = HTTPS_PROTOCOL;
         String remainder = url;
         if (url.startsWith("http://")) {
             protocol = "http";
             remainder = url.substring("http://".length());
-        } else if (url.startsWith("https://")) {
-            protocol = "https";
-            remainder = url.substring("https://".length());
+        } else if (url.startsWith(HTTPS_PROTOCOL + "://")) {
+            remainder = url.substring((HTTPS_PROTOCOL + "://").length());
         }
 
         int slashIndex = remainder.indexOf('/');
@@ -334,12 +335,12 @@ public class HarToJmxService {
         }
 
         String hostPort = remainder.substring(0, splitIndex);
-        String pathAndQuery = splitIndex < remainder.length() ? remainder.substring(splitIndex) : "/";
+        String pathAndQuery = splitIndex < remainder.length() ? remainder.substring(splitIndex) : ROOT_PATH;
         if (pathAndQuery.isBlank()) {
-            pathAndQuery = "/";
+            pathAndQuery = ROOT_PATH;
         }
-        if (!pathAndQuery.startsWith("/")) {
-            pathAndQuery = "/" + pathAndQuery;
+        if (!pathAndQuery.startsWith(ROOT_PATH)) {
+            pathAndQuery = ROOT_PATH + pathAndQuery;
         }
 
         String domain = hostPort;
@@ -365,7 +366,7 @@ public class HarToJmxService {
             path = path.substring(0, q);
         }
         if (path.isBlank()) {
-            path = "/";
+            path = ROOT_PATH;
         }
         String pathWithQuery = query.isBlank() ? path : path + "?" + query;
         return new UrlParts(protocol, domain, port, path, query, pathWithQuery);
@@ -400,7 +401,7 @@ public class HarToJmxService {
 
     private String safeName(String name) {
         String text = Objects.toString(name, "").trim();
-        return text.isBlank() ? "/" : text;
+        return text.isBlank() ? ROOT_PATH : text;
     }
 
     private long parseTimestamp(String raw) {
@@ -425,7 +426,7 @@ public class HarToJmxService {
 
     private String normalizeTransactionLabel(String raw) {
         String text = Objects.toString(raw, "").trim();
-        if (text.isBlank() || "/".equals(text)) {
+        if (text.isBlank() || ROOT_PATH.equals(text)) {
             return "Home";
         }
 

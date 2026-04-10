@@ -1,5 +1,6 @@
 package com.ngenia.harparam.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ngenia.harparam.model.AnalysisResult;
 import com.ngenia.harparam.service.HarAnalysisService;
@@ -14,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.util.unit.DataSize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -23,7 +25,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.springframework.http.HttpStatus.NOT_FOUND;
@@ -44,22 +45,27 @@ public class HarController {
     private final HarToJmxService harToJmxService;
     private final ObjectMapper objectMapper;
     private final String appVersion;
+    private final String maxFileSize;
+    private final long maxUploadBytes;
 
     public HarController(
             HarAnalysisService harAnalysisService,
             HarToJmxService harToJmxService,
             ObjectMapper objectMapper,
-            @Value("${app.version:dev}") String appVersion
+            @Value("${app.version:dev}") String appVersion,
+            @Value("${spring.servlet.multipart.max-file-size:unknown}") String maxFileSize
     ) {
         this.harAnalysisService = harAnalysisService;
         this.harToJmxService = harToJmxService;
         this.objectMapper = objectMapper;
         this.appVersion = appVersion;
+        this.maxFileSize = maxFileSize;
+        this.maxUploadBytes = parseMaxUploadBytes(maxFileSize);
     }
 
     @GetMapping("/")
     public String index(Model model) {
-        model.addAttribute("appVersion", appVersion);
+        addPageMetadata(model);
         return INDEX_VIEW;
     }
 
@@ -76,7 +82,7 @@ public class HarController {
             session.setAttribute(SESSION_ANALYSIS_RESULT, result);
             session.setAttribute(SESSION_ORIGINAL_HAR_FILENAME, safeFilename(harFile.getOriginalFilename()));
             return "redirect:/result";
-        } catch (Exception e) {
+        } catch (IllegalArgumentException | java.io.IOException e) {
             model.addAttribute("error", "Error while processing HAR: " + e.getMessage());
             return INDEX_VIEW;
         }
@@ -89,8 +95,22 @@ public class HarController {
             return "redirect:/";
         }
         model.addAttribute("result", result);
-        model.addAttribute("appVersion", appVersion);
+        addPageMetadata(model);
         return "result";
+    }
+
+    private void addPageMetadata(Model model) {
+        model.addAttribute("appVersion", appVersion);
+        model.addAttribute("maxFileSize", maxFileSize);
+        model.addAttribute("maxUploadBytes", maxUploadBytes);
+    }
+
+    private long parseMaxUploadBytes(String configuredMaxFileSize) {
+        try {
+            return DataSize.parse(configuredMaxFileSize).toBytes();
+        } catch (IllegalArgumentException ex) {
+            return -1L;
+        }
     }
 
     @GetMapping("/download/har")
@@ -114,7 +134,7 @@ public class HarController {
 
     @GetMapping("/download/rules")
     @ResponseBody
-    public ResponseEntity<byte[]> downloadRules(HttpSession session) throws Exception {
+    public ResponseEntity<byte[]> downloadRules(HttpSession session) throws JsonProcessingException {
         AnalysisResult result = requiredSessionAttribute(session, SESSION_ANALYSIS_RESULT, AnalysisResult.class, "No analysis result available.");
 
         Map<String, String> variables = new LinkedHashMap<>();

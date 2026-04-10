@@ -1,5 +1,7 @@
 package com.ngenia.harparam.model;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.Map;
 
 /**
@@ -29,5 +31,8 @@ public record RewrittenRequest(
         Map<String, String> rewrittenHeaders,
         String originalBody,
         String rewrittenBody
-) {
+) implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 }

@@ -20,6 +20,7 @@ import java.util.regex.Pattern;
 @Service
 class HarRequestClassifier {
 
+    private static final String HEADERS = "headers";
     private static final Pattern IPV4_ADDRESS = Pattern.compile("\\d+\\.\\d+\\.\\d+\\.\\d+");
     private static final Set<String> EXCLUDED_HOSTS = Set.of(
             "www.google.com",
@@ -40,19 +41,17 @@ class HarRequestClassifier {
 
         for (JsonNode entryNode : entries) {
             JsonNode requestNode = entryNode.path("request");
-            if (!(requestNode instanceof com.fasterxml.jackson.databind.node.ObjectNode request)) {
-                continue;
+            if (requestNode instanceof com.fasterxml.jackson.databind.node.ObjectNode request) {
+                String url = request.path("url").asText("");
+                String host = extractHost(url);
+                if (!host.isBlank()
+                        && !isKnownThirdPartyHost(host)
+                        && isHttpOrHttps(url)
+                        && !isStaticByPath(url)
+                        && !isStaticByContentType(request.path(HEADERS), entryNode.path("response").path(HEADERS))) {
+                    hostCounts.merge(host, 1, Integer::sum);
+                }
             }
-
-            String url = request.path("url").asText("");
-            String host = extractHost(url);
-            if (host.isBlank() || isKnownThirdPartyHost(host) || !isHttpOrHttps(url)) {
-                continue;
-            }
-            if (isStaticByPath(url) || isStaticByContentType(request.path("headers"), entryNode.path("response").path("headers"))) {
-                continue;
-            }
-            hostCounts.merge(host, 1, Integer::sum);
         }
 
         if (hostCounts.isEmpty()) {
@@ -93,7 +92,7 @@ class HarRequestClassifier {
             return false;
         }
 
-        return !isStaticByContentType(request.path("headers"), response.path("headers"));
+        return !isStaticByContentType(request.path(HEADERS), response.path(HEADERS));
     }
 
     private boolean isKnownThirdPartyHost(String host) {
